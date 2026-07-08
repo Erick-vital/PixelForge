@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}LLM · FastAPI HTMX Service Template{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">LLM manager</p>
+    <h2>Centralized provider integration</h2>
+    <p class="muted">Use <code>LlmGenerationService.generate_text(...)</code> from domain services. Routes should not know provider details or API-key lookup rules.</p>
+    <pre><code>await LlmGenerationService().generate_text(
+    system_prompt="You are concise.",
+    prompt=input_text,
+    provider=provider,
+    model=model,
+    base_url=base_url,
+    temperature=0.2,
+    max_tokens=2000,
+)</code></pre>
+    <p class="path-note">Secrets are read server-side from <code>APP_LLM_API_KEY</code>, <code>APP_OPENAI_API_KEY</code>, or <code>APP_ANTHROPIC_API_KEY</code> and are never logged.</p>
+  </section>
+{% endblock %}

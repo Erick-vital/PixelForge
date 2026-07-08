@@ -1,0 +1,13 @@
+<div class="card results">
+  <h2>Workflow completed</h2>
+  <div class="metrics">
+    <div><strong>{{ result.title }}</strong><span>title</span></div>
+    <div><strong>{{ result.status }}</strong><span>status</span></div>
+    <div><strong>{{ result.provider or 'none' }}</strong><span>provider</span></div>
+  </div>
+  <p><strong>Summary:</strong> {{ result.summary }}</p>
+  {% if result.model %}<p class="path-note">Model: <code>{{ result.model }}</code></p>{% endif %}
+  <h3>Generated text</h3>
+  <pre class="markdown-output"><code>{{ result.generated_text }}</code></pre>
+  <p class="path-note">Saved to: <code>{{ result.saved_run.run_dir }}</code></p>
+</div>

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Settings · FastAPI HTMX Service Template{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">Settings</p>
+    <h2>Runtime configuration</h2>
+    <p class="muted">The template reads <code>APP_*</code> environment variables and an optional repo-local <code>.env</code>. Tests set <code>APP_ENV_FILE=""</code> to avoid live config.</p>
+    <dl class="kv">
+      <dt>Data dir</dt><dd><code>{{ settings.data_dir }}</code></dd>
+      <dt>Items dir</dt><dd><code>{{ settings.items_dir }}</code></dd>
+      <dt>Env file</dt><dd><code>{{ env_file or 'disabled' }}</code></dd>
+      <dt>Log level</dt><dd><code>{{ settings.log_level }}</code></dd>
+      <dt>LLM provider</dt><dd><code>{{ provider }}</code></dd>
+      <dt>LLM default model</dt><dd><code>{{ default_model }}</code></dd>
+      <dt>LLM base URL</dt><dd><code>{{ base_url }}</code></dd>
+    </dl>
+  </section>
+{% endblock %}

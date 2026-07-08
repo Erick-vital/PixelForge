@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="hero">
+    <p class="eyebrow">Local-first · API + HTMX</p>
+    <h1>Reusable FastAPI + HTMX service template.</h1>
+    <p class="lead">Start new server services with thin routes, shared services, JSON logs, repo-local artifacts, optional LLM calls, and visible in-page HTMX feedback.</p>
+  </section>
+
+  <section class="card">
+    <p class="eyebrow">Architecture</p>
+    <h2>Routes → Schemas → Services → Artifacts</h2>
+    <div class="columns">
+      <section>
+        <h3><a href="/workflow">Workflow UI</a></h3>
+        <p class="muted">A page submits forms with HTMX, receives partial HTML, and swaps <code>#results</code> while keeping progress/success/error visible.</p>
+      </section>
+      <section>
+        <h3>JSON API</h3>
+        <p class="muted">The API route calls the same service as the UI and returns stable Pydantic response models.</p>
+      </section>
+    </div>
+    <div class="columns">
+      <section>
+        <h3><a href="/settings">Settings</a></h3>
+        <p class="muted">All configuration uses <code>APP_*</code> environment variables and an optional repo <code>.env</code>.</p>
+      </section>
+      <section>
+        <h3><a href="/llm">LLM manager</a></h3>
+        <p class="muted">OpenAI-compatible and Anthropic calls are centralized behind one async service.</p>
+      </section>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,24 @@
+[project]
+name = "fastapi-htmx-service-template"
+version = "0.1.0"
+description = "Reusable local-first FastAPI + HTMX service template with JSON logs, artifacts, and optional LLM calls."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "python-multipart",
+  "pydantic",
+  "pydantic-settings",
+  "jinja2",
+  "httpx",
+]
+
+[dependency-groups]
+dev = [
+  "pytest",
+  "httpx",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
