@@ -23,6 +23,9 @@ def test_asset_spec_endpoint_turns_prompt_into_structured_pixel_art_spec():
     assert body["size"] == {"width": 64, "height": 64}
     assert body["technical_constraints"]["transparent_background"] is True
     assert body["technical_constraints"]["pixel_art"] is True
+    assert body["prompt_guidance"]["target_prompt_tone"] == "concise game-asset prompt"
+    assert body["processing_profile"]["resize_mode"] == "nearest-neighbor"
+    assert body["processing_profile"]["palette_max_colors"] == 24
 
 
 def test_generation_prompt_endpoint_creates_positive_and_negative_prompts():
@@ -69,6 +72,7 @@ def test_processing_plan_endpoint_returns_standard_pixel_art_pipeline_steps():
     ]
     assert "64x64 transparent canvas" in steps[0]["instruction"]
     assert "nearest-neighbor" in steps[2]["instruction"]
+    assert "24 colors" in steps[3]["instruction"]
 
 
 def test_process_sprite_endpoint_resizes_centers_and_returns_png_with_validation_report():

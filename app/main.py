@@ -10,9 +10,9 @@ from app.services.logging_config import configure_logging
 configure_logging()
 
 app = FastAPI(
-    title="FastAPI HTMX Service Template",
+    title="PixelForge",
     version="0.1.0",
-    description="Reusable local-first service template with API, HTMX UI, JSON logs, artifacts, and optional LLM calls.",
+    description="Prompt-to-sprite service with API, HTMX UI, JSON logs, and optional LLM calls.",
 )
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 

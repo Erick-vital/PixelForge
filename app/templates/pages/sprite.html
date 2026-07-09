@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Sprite · PixelForge{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">PixelForge Sprite</p>
+    <h1>Prompt to Sprite Processing Instructions</h1>
+    <p class="lead">Escribe un prompt y genera una Asset Spec, un prompt técnico de imagen y un plan de postprocesado 2D.</p>
+    <form
+      hx-post="/ui/sprite/spec"
+      hx-target="#results"
+      hx-swap="innerHTML"
+      hx-on::before-request="document.getElementById('sprite-status').textContent='Generando asset spec…'; document.getElementById('sprite-status').className='status is-loading'; document.getElementById('sprite-submit').disabled=true;"
+      hx-on::after-request="document.getElementById('sprite-submit').disabled=false; document.getElementById('sprite-status').textContent = event.detail.successful ? 'Listo. Ya tienes el plan de sprite.' : 'No se pudo generar el plan de sprite.'; document.getElementById('sprite-status').className = event.detail.successful ? 'status is-success' : 'status is-error';"
+    >
+      <label for="prompt">Prompt
+        <textarea id="prompt" name="prompt" rows="7" placeholder="Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down" required>Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down</textarea>
+      </label>
+      <div class="action-row">
+        <button id="sprite-submit" type="submit">Generar Sprite Spec</button>
+        <span id="sprite-status" class="status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
+
+  <section id="results">
+    <div class="card muted">
+      <p>Tu resultado aparecerá aquí después de enviar el prompt.</p>
+    </div>
+  </section>
+{% endblock %}

@@ -7,6 +7,8 @@ from typing_extensions import Annotated
 
 AllowedAssetType = Literal["enemy", "prop", "icon"]
 AllowedView = Literal["side-view", "top-down 3/4", "icon/front"]
+AllowedResizeMode = Literal["nearest-neighbor"]
+AllowedExportFormat = Literal["png"]
 
 
 class SpriteSize(BaseModel):
@@ -15,9 +17,9 @@ class SpriteSize(BaseModel):
 
     @field_validator("width", "height")
     @classmethod
-    def supported_mvp_size(cls, value: int) -> int:
+    def supported_sprite_size(cls, value: int) -> int:
         if value not in {32, 64, 128}:
-            raise ValueError("MVP supports only 32, 64, or 128 pixels")
+            raise ValueError("Supported sprite sizes are 32, 64, or 128 pixels")
         return value
 
 
@@ -38,6 +40,22 @@ class TechnicalConstraints(BaseModel):
     readable_at_small_size: bool = True
 
 
+class PromptGuidance(BaseModel):
+    target_prompt_tone: str = "concise game-asset prompt"
+    include_size: bool = True
+    include_style: bool = True
+    include_negative_prompt: bool = True
+    normalize_subject_to_english: bool = True
+
+
+class ProcessingProfile(BaseModel):
+    resize_mode: AllowedResizeMode = "nearest-neighbor"
+    palette_max_colors: int = Field(default=24, ge=8, le=32)
+    center_sprite: bool = True
+    transparent_background: bool = True
+    export_format: AllowedExportFormat = "png"
+
+
 class AssetSpec(BaseModel):
     asset_type: AllowedAssetType = "prop"
     subject: str = "game asset"
@@ -47,6 +65,8 @@ class AssetSpec(BaseModel):
     palette: PaletteSpec = Field(default_factory=PaletteSpec)
     shape: ShapeSpec = Field(default_factory=ShapeSpec)
     technical_constraints: TechnicalConstraints = Field(default_factory=TechnicalConstraints)
+    prompt_guidance: PromptGuidance = Field(default_factory=PromptGuidance)
+    processing_profile: ProcessingProfile = Field(default_factory=ProcessingProfile)
 
 
 class AssetSpecRequest(BaseModel):
@@ -86,12 +106,6 @@ class SpriteValidationReport(BaseModel):
     transparent: bool
     non_empty: bool
     notes: list[str] = Field(default_factory=list)
-
-
-class SpriteMvpResponse(BaseModel):
-    asset_spec: AssetSpec
-    generation_prompt: GenerationPromptResponse
-    processing_plan: ProcessingPlanResponse
 
 
 JsonObject = dict[str, Any]

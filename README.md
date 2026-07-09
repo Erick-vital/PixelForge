@@ -1,32 +1,113 @@
-# FastAPI HTMX Service Template
+# PixelForge
 
-Reusable local-first template for server services. It preserves the architecture pattern from `job-market-intelligence` without domain-specific code.
+PixelForge is a prompt-to-sprite service built with FastAPI + HTMX.
 
-## Included
+The product focus is:
+
+1. Receive a natural-language prompt
+2. Convert it into a canonical Asset Spec
+3. Generate a technical generation prompt and a 2D processing plan
+4. Optionally process an input sprite into a transparent PNG
+5. Offer a simple browser front with a text box and button for the main prompt flow
+
+## What the repo does now
 
 - FastAPI JSON API
-- Jinja2 pages + HTMX partial responses
+- Canonical Sprite Asset Spec with structured guidance sections
+- Separate interpretation and processing services
+- 2D sprite post-processing with Pillow
+- Jinja2 pages + HTMX partials for the sprite UI
 - Visible inline progress/success/error feedback with `hx-on::before-request` and `hx-on::after-request`
-- Thin routes, Pydantic schemas, internal dataclasses, service layer
 - JSON logs to stdout via `APP_LOG_LEVEL`
 - Central settings in `app/services/settings.py` using `APP_*` env vars and optional `.env`
-- Shared LLM manager for OpenAI-compatible and Anthropic providers
-- SQLite + filesystem artifact store
-- Tests for API, web pages, HTMX partials, artifact persistence, and LLM provider wiring
+- SQLite + filesystem artifact store for persisted runs and reports
+- Hermetic tests
+
+## Sprite front
+
+The browser front lives at:
+
+- `/sprite`
+
+It has:
+- a text box for the prompt
+- a button to generate the result
+- inline loading/success/error feedback
+- an HTMX results panel that shows:
+  - Asset Spec JSON
+  - generation prompt JSON
+  - processing plan JSON
+
+## Sprite API
+
+### `POST /api/asset-spec`
+
+Turns a user prompt into a structured Asset Spec.
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8025/api/asset-spec \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down"
+  }'
+```
+
+### `POST /api/generation-prompt`
+
+Converts an Asset Spec into a model-ready generation prompt + negative prompt.
+
+### `POST /api/processing-plan`
+
+Converts an Asset Spec into a deterministic 2D post-processing plan.
+
+### `POST /api/process-sprite`
+
+Accepts a PNG upload plus `asset_spec_json` and returns a processed transparent PNG.
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8025/api/process-sprite \
+  -F 'asset_spec_json={"size":{"width":64,"height":64},"technical_constraints":{"transparent_background":true,"pixel_art":true}}' \
+  -F 'image=@/path/to/input.png;type=image/png' \
+  --output processed.png
+```
+
+## Sprite contract and pipeline
+
+The canonical Asset Spec currently carries:
+
+- `asset_type`
+- `subject`
+- `game_view`
+- `style`
+- `size`
+- `palette`
+- `shape`
+- `technical_constraints`
+- `prompt_guidance`
+- `processing_profile`
+
+Interpretation and processing are now separated in code:
+
+- `app/services/sprite_interpretation.py` handles prompt interpretation and prompt/plan generation
+- `app/services/sprite_processing.py` handles image processing with Pillow
+- `app/services/sprite.py` is the orchestration layer used by the API and UI
 
 ## Run
 
 ```bash
-cd /home/erickesc/repos/fastapi-htmx-service-template
+cd /home/erickesc/repos/PixelForge
 uv sync
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8025
 ```
 
 Open:
 
-```text
-http://127.0.0.1:8025
-```
+- `http://127.0.0.1:8025/` for the PixelForge home
+- `http://127.0.0.1:8025/sprite` for the Sprite front
 
 Health:
 
@@ -40,22 +121,12 @@ Tests:
 uv run pytest -q
 ```
 
-## API example
-
-```bash
-curl -X POST http://127.0.0.1:8025/api/workflow/run \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Example","input_text":"hello template","use_llm":false}'
-```
-
-Generated runtime artifacts are saved under `items/runs/` and indexed in `data/app.sqlite`.
-
 ## Template conventions
 
 - `app/routes/`: HTTP parsing, dependency injection, response shaping
 - `app/schemas/`: Pydantic request/response contracts
 - `app/models/`: internal dataclasses and DTOs
-- `app/services/`: domain logic, persistence, settings, logging, LLM provider clients
+- `app/services/`: domain logic, persistence, settings, logging, integrations
 - `app/templates/pages/`: full pages
 - `app/templates/partials/`: HTMX fragments
 - `app/static/styles.css`: all styling
@@ -72,3 +143,11 @@ See `.env.example`. Important variables:
 - `APP_LLM_MODEL`
 - `APP_LLM_BASE_URL`
 - `APP_LLM_API_KEY`, `APP_OPENAI_API_KEY`, `APP_ANTHROPIC_API_KEY`
+
+## Notes
+
+- The MVP supports `enemy`, `prop`, and `icon` assets.
+- Supported sizes: `32x32`, `64x64`, `128x128`.
+- Supported views: `side-view`, `top-down 3/4`, `icon/front`.
+- Output is PNG with transparency.
+- The existing run/artifact subsystem remains available internally for persisted runs.

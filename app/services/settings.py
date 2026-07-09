@@ -69,14 +69,14 @@ def get_app_settings() -> AppSettings:
 
 
 @dataclass(frozen=True)
-class WorkflowSettings:
+class StorageSettings:
     data_dir: Path = DEFAULT_DATA_DIR
     items_dir: Path = DEFAULT_ITEMS_DIR
 
 
-def get_workflow_settings() -> WorkflowSettings:
+def get_storage_settings() -> StorageSettings:
     settings = get_app_settings()
-    return WorkflowSettings(data_dir=settings.data_dir.expanduser(), items_dir=settings.items_dir.expanduser())
+    return StorageSettings(data_dir=settings.data_dir.expanduser(), items_dir=settings.items_dir.expanduser())
 
 
 def get_llm_provider(request_provider: str | None = None, *, settings: AppSettings | None = None) -> str:
