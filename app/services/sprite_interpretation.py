@@ -96,26 +96,28 @@ def create_asset_spec_from_prompt(prompt: str) -> AssetSpec:
 
 
 def create_generation_prompt(asset_spec: AssetSpec) -> GenerationPromptResponse:
+    guidance = asset_spec.prompt_guidance
+    constraints = asset_spec.technical_constraints
     size = f"{asset_spec.size.width}x{asset_spec.size.height}"
     colors = _palette_words(asset_spec.palette)
-    silhouette = asset_spec.shape.silhouette
     prompt_parts = [
-        f"{size} pixel art sprite",
+        f"{size} pixel art sprite" if guidance.include_size else "pixel art sprite",
         f"{asset_spec.subject} {asset_spec.asset_type}",
         f"{asset_spec.game_view} view",
-        asset_spec.style,
-        silhouette,
+        asset_spec.style if guidance.include_style else "",
+        asset_spec.shape.silhouette,
     ]
     if colors:
         prompt_parts.append(f"palette: {colors}")
-    if asset_spec.prompt_guidance.include_size:
+    if constraints.transparent_background:
         prompt_parts.append("transparent background")
-    if asset_spec.prompt_guidance.include_style:
+    if constraints.readable_at_small_size:
         prompt_parts.append("readable silhouette")
     prompt_parts.append("game-ready asset")
+    negative_prompt = "blurry, realistic, smooth gradients, complex background, oversized details, text, watermark, low readability"
     return GenerationPromptResponse(
         prompt=", ".join(part for part in prompt_parts if part),
-        negative_prompt="blurry, realistic, smooth gradients, complex background, oversized details, text, watermark, low readability",
+        negative_prompt=negative_prompt if guidance.include_negative_prompt else "",
     )
 
 
@@ -184,8 +186,6 @@ def _detect_style(text: str, subject: str) -> str:
     fantasy_subjects = {"baby dragon", "dragon", "treasure chest", "potion", "sword"}
     if "pixel" in text and subject in fantasy_subjects:
         return "pixel art fantasy"
-    if "pixel" in text:
-        return "pixel art"
     return "pixel art"
 
 

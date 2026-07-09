@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from app.services.settings import get_llm_api_key, get_llm_base_url, get_llm_default_model, get_llm_model, get_llm_provider
+from app.services.settings import get_app_settings, get_llm_api_key, get_llm_base_url, get_llm_default_model, get_llm_model, get_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +40,12 @@ class LlmGenerationService:
         temperature: float = 0.2,
         max_tokens: int | None = None,
     ) -> LlmGenerationResult:
-        resolved_provider = get_llm_provider(provider)
-        resolved_api_key = get_llm_api_key(api_key, provider=resolved_provider)
-        requested_model = get_llm_model(model, provider=resolved_provider)
+        settings = get_app_settings()
+        resolved_provider = get_llm_provider(provider, settings=settings)
+        resolved_api_key = get_llm_api_key(api_key, provider=resolved_provider, settings=settings)
+        requested_model = get_llm_model(model, provider=resolved_provider, settings=settings)
         default_model = get_llm_default_model(resolved_provider)
-        resolved_base_url = get_llm_base_url(base_url, provider=resolved_provider)
+        resolved_base_url = get_llm_base_url(base_url, provider=resolved_provider, settings=settings)
         logger.info(
             "llm generation config resolved",
             extra={
@@ -153,4 +154,4 @@ def _normalized_content(content: object) -> str:
     text = str(content).strip()
     if not text:
         raise LlmGenerationProviderError("LLM provider returned empty content")
-    return text + "\n"
+    return text

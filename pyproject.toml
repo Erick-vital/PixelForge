@@ -12,6 +12,7 @@ dependencies = [
   "jinja2",
   "httpx",
   "pillow",
+  "numpy",
 ]
 
 [dependency-groups]

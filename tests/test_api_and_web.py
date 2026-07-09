@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -53,3 +55,28 @@ def test_sprite_htmx_form_returns_structured_asset_spec_json():
     assert '"resize_mode": "nearest-neighbor"' in response.text
     assert "Generation prompt JSON" in response.text
     assert "Processing plan JSON" in response.text
+    assert 'hx-post="/ui/sprite/render-blueprint"' in response.text
+    assert 'name="blueprint_json"' in response.text
+
+
+def test_sprite_render_htmx_returns_preview_image():
+    client = TestClient(app)
+    spec = client.post(
+        "/api/asset-spec",
+        json={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down"},
+    ).json()
+
+    blueprint = client.post(
+        "/api/blueprint",
+        json={"asset_spec": spec, "seed": 123},
+    ).json()
+
+    response = client.post(
+        "/ui/sprite/render-blueprint",
+        data={"blueprint_json": json.dumps(blueprint), "width": "64", "height": "64", "seed": "123"},
+    )
+
+    assert response.status_code == 200
+    assert "Procedural PNG preview" in response.text
+    assert "data:image/png;base64," in response.text
+    assert "baby_dragon" in response.text

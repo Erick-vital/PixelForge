@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 from typing_extensions import Annotated
 
 AllowedAssetType = Literal["enemy", "prop", "icon"]
@@ -11,16 +11,18 @@ AllowedResizeMode = Literal["nearest-neighbor"]
 AllowedExportFormat = Literal["png"]
 
 
-class SpriteSize(BaseModel):
-    width: int = Field(ge=32, le=128)
-    height: int = Field(ge=32, le=128)
+def _supported_sprite_dimension(value: int) -> int:
+    if value not in {32, 64, 128}:
+        raise ValueError("Supported sprite sizes are 32, 64, or 128 pixels")
+    return value
 
-    @field_validator("width", "height")
-    @classmethod
-    def supported_sprite_size(cls, value: int) -> int:
-        if value not in {32, 64, 128}:
-            raise ValueError("Supported sprite sizes are 32, 64, or 128 pixels")
-        return value
+
+SpriteDimension = Annotated[int, AfterValidator(_supported_sprite_dimension)]
+
+
+class SpriteSize(BaseModel):
+    width: SpriteDimension
+    height: SpriteDimension
 
 
 class PaletteSpec(BaseModel):
@@ -99,6 +101,40 @@ class ProcessingPlanResponse(BaseModel):
     steps: list[ProcessingStep]
 
 
+class RenderSpriteRequest(BaseModel):
+    asset_spec: AssetSpec
+    seed: int = 0
+
+
+class SpriteBlueprintRequest(BaseModel):
+    asset_spec: AssetSpec
+    seed: int = 0
+
+
+class RenderBlueprintRequest(BaseModel):
+    blueprint: "SpriteBlueprint"
+    width: SpriteDimension
+    height: SpriteDimension
+    seed: int = 0
+
+
+class SpritePrimitive(BaseModel):
+    op: Literal["ellipse", "rectangle", "polygon", "line", "point"]
+    fill: str
+    bbox: tuple[int, int, int, int] | None = None
+    points: list[tuple[int, int]] = Field(default_factory=list)
+    width: int | None = None
+    size: int | None = None
+
+
+class SpriteBlueprint(BaseModel):
+    recipe: str
+    subject: str
+    palette: dict[str, str]
+    primitives: list[SpritePrimitive]
+    notes: list[str] = Field(default_factory=list)
+
+
 class SpriteValidationReport(BaseModel):
     width: int
     height: int
@@ -109,3 +145,6 @@ class SpriteValidationReport(BaseModel):
 
 
 JsonObject = dict[str, Any]
+
+
+RenderBlueprintRequest.model_rebuild()

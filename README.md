@@ -7,14 +7,16 @@ The product focus is:
 1. Receive a natural-language prompt
 2. Convert it into a canonical Asset Spec
 3. Generate a technical generation prompt and a 2D processing plan
-4. Optionally process an input sprite into a transparent PNG
-5. Offer a simple browser front with a text box and button for the main prompt flow
+4. Render a first-pass procedural PNG without image models
+5. Optionally process an input sprite into a transparent PNG
+6. Offer a simple browser front with a text box and button for the main prompt flow
 
 ## What the repo does now
 
 - FastAPI JSON API
 - Canonical Sprite Asset Spec with structured guidance sections
 - Separate interpretation and processing services
+- Procedural sprite rendering in Python with Pillow + NumPy
 - 2D sprite post-processing with Pillow
 - Jinja2 pages + HTMX partials for the sprite UI
 - Visible inline progress/success/error feedback with `hx-on::before-request` and `hx-on::after-request`
@@ -37,6 +39,7 @@ It has:
   - Asset Spec JSON
   - generation prompt JSON
   - processing plan JSON
+- a procedural PNG render button with inline preview
 
 ## Sprite API
 
@@ -61,6 +64,31 @@ Converts an Asset Spec into a model-ready generation prompt + negative prompt.
 ### `POST /api/processing-plan`
 
 Converts an Asset Spec into a deterministic 2D post-processing plan.
+
+### `POST /api/render-sprite`
+
+Renders a first-pass procedural PNG directly from an Asset Spec. This path does not call an image model.
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8025/api/render-sprite \
+  -H "Content-Type: application/json" \
+  -d '{
+    "asset_spec": {
+      "subject": "baby dragon",
+      "size": {"width": 64, "height": 64}
+    },
+    "seed": 123
+  }' \
+  --output baby-dragon.png
+```
+
+The first render recipes support:
+
+- `baby dragon`
+- `potion`
+- `sword`
 
 ### `POST /api/process-sprite`
 
@@ -93,6 +121,7 @@ The canonical Asset Spec currently carries:
 Interpretation and processing are now separated in code:
 
 - `app/services/sprite_interpretation.py` handles prompt interpretation and prompt/plan generation
+- `app/services/procedural_sprite.py` handles model-free procedural PNG rendering
 - `app/services/sprite_processing.py` handles image processing with Pillow
 - `app/services/sprite.py` is the orchestration layer used by the API and UI
 

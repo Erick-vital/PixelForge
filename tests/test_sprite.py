@@ -47,6 +47,24 @@ def test_generation_prompt_endpoint_creates_positive_and_negative_prompts():
     assert "watermark" in body["negative_prompt"]
 
 
+def test_generation_prompt_respects_prompt_guidance_flags():
+    client = TestClient(app)
+    spec = client.post(
+        "/api/asset-spec",
+        json={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para RPG top-down"},
+    ).json()
+    spec["prompt_guidance"].update({"include_size": False, "include_style": False, "include_negative_prompt": False})
+
+    response = client.post("/api/generation-prompt", json={"asset_spec": spec})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "64x64" not in body["prompt"]
+    assert spec["style"] not in body["prompt"]
+    assert "transparent background" in body["prompt"]
+    assert body["negative_prompt"] == ""
+
+
 def test_processing_plan_endpoint_returns_standard_pixel_art_pipeline_steps():
     spec = {
         "asset_type": "enemy",

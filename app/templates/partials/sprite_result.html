@@ -2,6 +2,32 @@
   <h2>Sprite result</h2>
   <p class="path-note">Prompt: <code>{{ prompt }}</code></p>
 
+  <h3>Blueprint JSON</h3>
+  <pre class="json-output"><code>{{ blueprint_json | tojson(indent=2) }}</code></pre>
+
+  <form
+    hx-post="/ui/sprite/render-blueprint"
+    hx-target="#sprite-preview"
+    hx-swap="innerHTML"
+    hx-on::before-request="document.getElementById('render-status').textContent='Generando PNG procedural…'; document.getElementById('render-status').className='status is-loading'; document.getElementById('render-submit').disabled=true;"
+    hx-on::after-request="document.getElementById('render-submit').disabled=false; document.getElementById('render-status').textContent = event.detail.successful ? 'PNG procedural listo.' : 'No se pudo generar el PNG.'; document.getElementById('render-status').className = event.detail.successful ? 'status is-success' : 'status is-error';"
+  >
+    <input type="hidden" name="blueprint_json" value='{{ blueprint_json_text }}' />
+    <input type="hidden" name="width" value="{{ asset_spec.size.width }}" />
+    <input type="hidden" name="height" value="{{ asset_spec.size.height }}" />
+    <label for="seed">Seed
+      <input id="seed" name="seed" type="number" value="0" />
+    </label>
+    <div class="action-row">
+      <button id="render-submit" type="submit">Renderizar PNG desde blueprint</button>
+      <span id="render-status" class="status" role="status" aria-live="polite"></span>
+    </div>
+  </form>
+
+  <div id="sprite-preview" class="preview-slot">
+    <p class="muted">El preview PNG aparecerá aquí.</p>
+  </div>
+
   <h3>Asset Spec JSON</h3>
   <pre class="json-output"><code>{{ asset_spec_json | tojson(indent=2) }}</code></pre>
 

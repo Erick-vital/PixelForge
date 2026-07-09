@@ -35,4 +35,11 @@ code { color: #bae6fd; }
 .kv { display: grid; grid-template-columns: 180px 1fr; gap: 12px 18px; }
 .kv dt { color: var(--muted); font-weight: 800; }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 760px) { .grid-two, .columns, .metrics, .menu, .kv { grid-template-columns: 1fr; } }
+.preview-slot { margin: 18px 0; }
+.sprite-preview-card { display: grid; gap: 14px; border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: #0d1424; }
+.sprite-preview-image { width: 192px; height: 192px; image-rendering: pixelated; image-rendering: crisp-edges; border: 1px solid var(--line); border-radius: 14px; background: repeating-conic-gradient(#182238 0% 25%, #101827 0% 50%) 50% / 24px 24px; }
+.metadata-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.metadata-grid div { border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.metadata-grid dt { color: var(--muted); font-weight: 800; }
+.metadata-grid dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .grid-two, .columns, .metrics, .menu, .kv, .metadata-grid { grid-template-columns: 1fr; } }

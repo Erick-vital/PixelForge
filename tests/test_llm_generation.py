@@ -42,7 +42,7 @@ def test_llm_service_uses_openai_compatible_provider_without_leaking_secret(monk
         )
     )
 
-    assert result.text == "generated text\n"
+    assert result.text == "generated text"
     assert result.provider == "openai_compatible"
     assert result.model == "gpt-test"
     assert FakeAsyncClient.calls[0]["url"] == "https://api.openai.com/v1/chat/completions"

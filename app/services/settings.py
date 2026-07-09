@@ -91,10 +91,10 @@ def get_llm_provider(request_provider: str | None = None, *, settings: AppSettin
     return DEFAULT_LLM_PROVIDER
 
 
-def get_llm_api_key(request_api_key: str | None = None, provider: str | None = None) -> str:
+def get_llm_api_key(request_api_key: str | None = None, provider: str | None = None, *, settings: AppSettings | None = None) -> str:
     if request_api_key and request_api_key.strip():
         return request_api_key.strip()
-    settings = get_app_settings()
+    settings = settings or get_app_settings()
     resolved_provider = get_llm_provider(provider, settings=settings)
     candidates = _llm_api_key_candidates(settings, resolved_provider)
     for _, value in candidates:
@@ -106,8 +106,8 @@ def get_llm_api_key(request_api_key: str | None = None, provider: str | None = N
     )
 
 
-def get_llm_model(request_model: str | None = None, provider: str | None = None) -> str:
-    settings = get_app_settings()
+def get_llm_model(request_model: str | None = None, provider: str | None = None, *, settings: AppSettings | None = None) -> str:
+    settings = settings or get_app_settings()
     resolved_provider = get_llm_provider(provider, settings=settings)
     if request_model and request_model.strip():
         return normalize_llm_model(request_model.strip(), provider=resolved_provider)
@@ -121,10 +121,10 @@ def get_llm_default_model(provider: str | None = None) -> str:
     return DEFAULT_LLM_MODEL_BY_PROVIDER.get(resolved_provider, DEFAULT_LLM_MODEL_BY_PROVIDER[DEFAULT_LLM_PROVIDER])
 
 
-def get_llm_base_url(request_base_url: str | None = None, provider: str | None = None) -> str:
+def get_llm_base_url(request_base_url: str | None = None, provider: str | None = None, *, settings: AppSettings | None = None) -> str:
     if request_base_url and request_base_url.strip():
         return request_base_url.strip()
-    settings = get_app_settings()
+    settings = settings or get_app_settings()
     if settings.llm_base_url.strip():
         return settings.llm_base_url.strip()
     resolved_provider = get_llm_provider(provider, settings=settings)
