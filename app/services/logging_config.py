@@ -6,7 +6,10 @@ import os
 import sys
 from datetime import UTC, datetime
 
-_RESERVED_LOG_RECORD_FIELDS = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {"message", "asctime"}
+_RESERVED_LOG_RECORD_FIELDS = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {
+    "message",
+    "asctime",
+}
 _CONFIGURED_SENTINEL = "_app_logging_configured"
 _ORIGINAL_MAKE_RECORD = logging.Logger.makeRecord
 

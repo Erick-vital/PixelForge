@@ -44,7 +44,13 @@ def build_sprite_blueprint(asset_spec: AssetSpec, *, seed: int = 0) -> SpriteBlu
     palette = _palette_for(asset_spec)
     logger.info(
         "procedural sprite blueprint built",
-        extra={"subject": asset_spec.subject, "recipe": recipe, "seed": seed, "width": asset_spec.size.width, "height": asset_spec.size.height},
+        extra={
+            "subject": asset_spec.subject,
+            "recipe": recipe,
+            "seed": seed,
+            "width": asset_spec.size.width,
+            "height": asset_spec.size.height,
+        },
     )
     if recipe == "baby_dragon":
         return _blueprint_for_baby_dragon(asset_spec.subject, palette, rng)
@@ -105,7 +111,9 @@ def _blueprint_for_potion(subject: str, palette: dict[str, str], rng: np.random.
         _poly([(cx - 9, cy + 8), (cx - 1, cy + 16), (cx - 11, cy + 16)], "shadow"),
         _point(cx + 5, cy + 4, "accent", size=2),
     ]
-    return SpriteBlueprint(recipe="potion", subject=subject, palette=palette, primitives=primitives, notes=["procedural potion recipe"])
+    return SpriteBlueprint(
+        recipe="potion", subject=subject, palette=palette, primitives=primitives, notes=["procedural potion recipe"]
+    )
 
 
 def _blueprint_for_sword(subject: str, palette: dict[str, str], rng: np.random.Generator) -> SpriteBlueprint:
@@ -123,17 +131,28 @@ def _blueprint_for_sword(subject: str, palette: dict[str, str], rng: np.random.G
         _ellipse((cx - 5, cy + 23, cx + 5, cy + 31), "outline"),
         _ellipse((cx - 3, cy + 24, cx + 3, cy + 29), "accent"),
     ]
-    return SpriteBlueprint(recipe="sword", subject=subject, palette=palette, primitives=primitives, notes=["procedural sword recipe"])
+    return SpriteBlueprint(
+        recipe="sword", subject=subject, palette=palette, primitives=primitives, notes=["procedural sword recipe"]
+    )
 
 
-def render_blueprint(blueprint: SpriteBlueprint, *, width: int, height: int, seed: int = 0, max_colors: int = 24) -> ProceduralSpriteResult:
+def render_blueprint(
+    blueprint: SpriteBlueprint, *, width: int, height: int, seed: int = 0, max_colors: int = 24
+) -> ProceduralSpriteResult:
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
     palette = {name: _rgba(hex_color) for name, hex_color in blueprint.palette.items()}
 
     logger.info(
         "procedural sprite render started",
-        extra={"recipe": blueprint.recipe, "subject": blueprint.subject, "width": width, "height": height, "seed": seed, "primitive_count": len(blueprint.primitives)},
+        extra={
+            "recipe": blueprint.recipe,
+            "subject": blueprint.subject,
+            "width": width,
+            "height": height,
+            "seed": seed,
+            "primitive_count": len(blueprint.primitives),
+        },
     )
     scale_x = width / BASE_CANVAS_SIZE
     scale_y = height / BASE_CANVAS_SIZE
@@ -155,7 +174,13 @@ def _blueprint_for_generic_prop(subject: str, palette: dict[str, str], rng: np.r
         _ellipse((cx - 12, cy - 12, cx + 12, cy + 12), "base"),
         _ellipse((cx - 8, cy - 8, cx + 4, cy + 4), "highlight"),
     ]
-    return SpriteBlueprint(recipe="generic_prop", subject=subject, palette=palette, primitives=primitives, notes=["generic procedural prop recipe"])
+    return SpriteBlueprint(
+        recipe="generic_prop",
+        subject=subject,
+        palette=palette,
+        primitives=primitives,
+        notes=["generic procedural prop recipe"],
+    )
 
 
 def _scale_primitive(primitive: SpritePrimitive, scale_x: float, scale_y: float) -> SpritePrimitive:
@@ -172,7 +197,9 @@ def _scale_primitive(primitive: SpritePrimitive, scale_x: float, scale_y: float)
     return SpritePrimitive(op=primitive.op, fill=primitive.fill, bbox=bbox, points=points, width=width, size=size)
 
 
-def _render_primitive(draw: ImageDraw.ImageDraw, primitive: SpritePrimitive, palette: dict[str, tuple[int, int, int, int]]) -> None:
+def _render_primitive(
+    draw: ImageDraw.ImageDraw, primitive: SpritePrimitive, palette: dict[str, tuple[int, int, int, int]]
+) -> None:
     fill = _resolve_fill(primitive.fill, palette)
     if primitive.op == "ellipse":
         if primitive.bbox is None:
@@ -265,7 +292,11 @@ def _limit_palette(image: Image.Image, *, max_colors: int) -> Image.Image:
 
 def _dominant_opaque_color(image: Image.Image) -> tuple[int, int, int]:
     colors = image.getcolors(maxcolors=image.width * image.height) or []
-    opaque = [(count, cast(tuple[int, int, int, int], color)) for count, color in colors if cast(tuple[int, int, int, int], color)[3] > 0]
+    opaque = [
+        (count, cast(tuple[int, int, int, int], color))
+        for count, color in colors
+        if cast(tuple[int, int, int, int], color)[3] > 0
+    ]
     if not opaque:
         return (0, 0, 0)
     _count, (red, green, blue, _alpha) = max(opaque)
@@ -274,7 +305,11 @@ def _dominant_opaque_color(image: Image.Image) -> tuple[int, int, int]:
 
 def _build_report(image: Image.Image, *, recipe: str, seed: int, primitive_count: int) -> dict[str, Any]:
     colors = image.getcolors(maxcolors=4096) or []
-    opaque_colors = [cast(tuple[int, int, int, int], color) for _count, color in colors if cast(tuple[int, int, int, int], color)[3] > 0]
+    opaque_colors = [
+        cast(tuple[int, int, int, int], color)
+        for _count, color in colors
+        if cast(tuple[int, int, int, int], color)[3] > 0
+    ]
     alpha = image.getchannel("A")
     min_alpha, _max_alpha = cast(tuple[int, int], alpha.getextrema())
     return {

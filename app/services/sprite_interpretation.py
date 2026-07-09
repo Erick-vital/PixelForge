@@ -15,9 +15,9 @@ from app.schemas.sprite import (
     GenerationPromptResponse,
     PaletteSpec,
     ProcessingPlanResponse,
+    ProcessingProfile,
     ProcessingStep,
     PromptGuidance,
-    ProcessingProfile,
     ShapeSpec,
     SpriteSize,
     TechnicalConstraints,
@@ -47,7 +47,9 @@ class SpriteSpecError(ValueError):
     pass
 
 
-async def create_asset_spec_from_request(request: AssetSpecRequest, llm_service: LlmGenerationService | None = None) -> AssetSpec:
+async def create_asset_spec_from_request(
+    request: AssetSpecRequest, llm_service: LlmGenerationService | None = None
+) -> AssetSpec:
     if request.use_llm:
         llm = llm_service or LlmGenerationService()
         result = await llm.generate_text(
@@ -114,7 +116,9 @@ def create_generation_prompt(asset_spec: AssetSpec) -> GenerationPromptResponse:
     if constraints.readable_at_small_size:
         prompt_parts.append("readable silhouette")
     prompt_parts.append("game-ready asset")
-    negative_prompt = "blurry, realistic, smooth gradients, complex background, oversized details, text, watermark, low readability"
+    negative_prompt = (
+        "blurry, realistic, smooth gradients, complex background, oversized details, text, watermark, low readability"
+    )
     return GenerationPromptResponse(
         prompt=", ".join(part for part in prompt_parts if part),
         negative_prompt=negative_prompt if guidance.include_negative_prompt else "",
@@ -131,12 +135,17 @@ def create_processing_plan(asset_spec: AssetSpec) -> ProcessingPlanResponse:
                 name="sprite_positioning",
                 instruction="Center the sprite within the canvas and keep visual mass balanced.",
             ),
-            ProcessingStep(name="pixel_art_resize", instruction=f"Use {profile.resize_mode} scaling only; never bicubic or smooth resampling."),
+            ProcessingStep(
+                name="pixel_art_resize",
+                instruction=f"Use {profile.resize_mode} scaling only; never bicubic or smooth resampling.",
+            ),
             ProcessingStep(
                 name="palette_limit",
                 instruction=f"Reduce color count to {profile.palette_max_colors} colors while preserving the main palette and shadow readability.",
             ),
-            ProcessingStep(name="export", instruction=f"Export {profile.export_format.upper()} with transparent background."),
+            ProcessingStep(
+                name="export", instruction=f"Export {profile.export_format.upper()} with transparent background."
+            ),
         ]
     )
 

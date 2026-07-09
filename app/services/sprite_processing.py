@@ -25,7 +25,11 @@ class SpriteProcessingResult:
 def process_sprite_image(image_bytes: bytes, asset_spec: AssetSpec) -> SpriteProcessingResult:
     logger.info(
         "sprite image processing started",
-        extra={"input_bytes": len(image_bytes), "target_width": asset_spec.size.width, "target_height": asset_spec.size.height},
+        extra={
+            "input_bytes": len(image_bytes),
+            "target_width": asset_spec.size.width,
+            "target_height": asset_spec.size.height,
+        },
     )
     try:
         image = Image.open(BytesIO(image_bytes)).convert("RGBA")

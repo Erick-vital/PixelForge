@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
-from typing_extensions import Annotated
 
 AllowedAssetType = Literal["enemy", "prop", "icon"]
 AllowedView = Literal["side-view", "top-down 3/4", "icon/front"]
@@ -112,7 +111,7 @@ class SpriteBlueprintRequest(BaseModel):
 
 
 class RenderBlueprintRequest(BaseModel):
-    blueprint: "SpriteBlueprint"
+    blueprint: SpriteBlueprint
     width: SpriteDimension
     height: SpriteDimension
     seed: int = 0

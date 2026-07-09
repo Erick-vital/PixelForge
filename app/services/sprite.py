@@ -3,15 +3,28 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from app.schemas.sprite import AssetSpec, AssetSpecRequest, GenerationPromptResponse, ProcessingPlanResponse, SpriteBlueprint
+from app.schemas.sprite import (
+    AssetSpec,
+    AssetSpecRequest,
+    GenerationPromptResponse,
+    ProcessingPlanResponse,
+    SpriteBlueprint,
+)
 from app.services.llm_generation import LlmGenerationService
+from app.services.procedural_sprite import (
+    ProceduralSpriteError,
+    build_sprite_blueprint,
+    render_procedural_sprite,
+)
+from app.services.procedural_sprite import (
+    render_blueprint as render_blueprint_png,
+)
 from app.services.sprite_interpretation import (
     SpriteSpecError,
     create_asset_spec_from_request,
     create_generation_prompt,
     create_processing_plan,
 )
-from app.services.procedural_sprite import ProceduralSpriteError, build_sprite_blueprint, render_blueprint as render_blueprint_png, render_procedural_sprite
 from app.services.sprite_processing import SpriteProcessingError, process_sprite_image
 
 logger = logging.getLogger(__name__)
@@ -36,7 +49,12 @@ class SpriteService:
             raise SpriteError(str(exc)) from exc
         logger.info(
             "sprite asset spec generation completed",
-            extra={"asset_type": spec.asset_type, "subject": spec.subject, "width": spec.size.width, "height": spec.size.height},
+            extra={
+                "asset_type": spec.asset_type,
+                "subject": spec.subject,
+                "width": spec.size.width,
+                "height": spec.size.height,
+            },
         )
         return spec
 
@@ -66,7 +84,9 @@ class SpriteService:
             raise SpriteError(str(exc)) from exc
         return result.png_bytes, result.report
 
-    def render_blueprint(self, blueprint: SpriteBlueprint, *, width: int, height: int, seed: int = 0) -> tuple[bytes, dict[str, object]]:
+    def render_blueprint(
+        self, blueprint: SpriteBlueprint, *, width: int, height: int, seed: int = 0
+    ) -> tuple[bytes, dict[str, object]]:
         try:
             result = render_blueprint_png(blueprint, width=width, height=height, seed=seed)
         except ProceduralSpriteError as exc:

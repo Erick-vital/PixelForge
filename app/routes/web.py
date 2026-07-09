@@ -9,7 +9,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.schemas.sprite import AssetSpec, AssetSpecRequest, SpriteBlueprint
-from app.services.settings import env_file_path, get_app_settings, get_llm_base_url, get_llm_default_model, get_llm_provider
+from app.services.settings import (
+    env_file_path,
+    get_app_settings,
+    get_llm_base_url,
+    get_llm_default_model,
+    get_llm_provider,
+)
 from app.services.sprite import SpriteService
 
 logger = logging.getLogger(__name__)
@@ -65,11 +71,18 @@ async def run_sprite_spec_ui(
         blueprint = service.create_sprite_blueprint(asset_spec, seed=0)
     except ValueError as exc:  # includes SpriteError and pydantic ValidationError
         logger.warning("sprite ui request failed", extra={"error": str(exc)})
-        return templates.TemplateResponse(request=request, name="partials/error.html", context={"error": str(exc)}, status_code=400)
+        return templates.TemplateResponse(
+            request=request, name="partials/error.html", context={"error": str(exc)}, status_code=400
+        )
 
     logger.info(
         "sprite ui request completed",
-        extra={"asset_type": asset_spec.asset_type, "subject": asset_spec.subject, "width": asset_spec.size.width, "height": asset_spec.size.height},
+        extra={
+            "asset_type": asset_spec.asset_type,
+            "subject": asset_spec.subject,
+            "width": asset_spec.size.width,
+            "height": asset_spec.size.height,
+        },
     )
     return templates.TemplateResponse(
         request=request,
@@ -103,7 +116,9 @@ def render_sprite_ui(
         png, report = service.render_sprite(asset_spec, seed=seed)
     except ValueError as exc:  # includes JSONDecodeError, SpriteError, and pydantic ValidationError
         logger.warning("sprite render ui request failed", extra={"error": str(exc)})
-        return templates.TemplateResponse(request=request, name="partials/error.html", context={"error": str(exc)}, status_code=400)
+        return templates.TemplateResponse(
+            request=request, name="partials/error.html", context={"error": str(exc)}, status_code=400
+        )
 
     encoded_png = b64encode(png).decode("ascii")
     logger.info("sprite render ui request completed", extra={"recipe": report["recipe"], "seed": report["seed"]})
@@ -123,16 +138,23 @@ def render_blueprint_ui(
     seed: int = Form(default=0),
     service: SpriteService = Depends(get_sprite_service),
 ) -> HTMLResponse:
-    logger.info("sprite blueprint render ui request started", extra={"seed": seed, "blueprint_chars": len(blueprint_json), "width": width, "height": height})
+    logger.info(
+        "sprite blueprint render ui request started",
+        extra={"seed": seed, "blueprint_chars": len(blueprint_json), "width": width, "height": height},
+    )
     try:
         blueprint = SpriteBlueprint.model_validate(json.loads(blueprint_json))
         png, report = service.render_blueprint(blueprint, width=width, height=height, seed=seed)
     except ValueError as exc:  # includes JSONDecodeError, SpriteError, and pydantic ValidationError
         logger.warning("sprite blueprint render ui request failed", extra={"error": str(exc)})
-        return templates.TemplateResponse(request=request, name="partials/error.html", context={"error": str(exc)}, status_code=400)
+        return templates.TemplateResponse(
+            request=request, name="partials/error.html", context={"error": str(exc)}, status_code=400
+        )
 
     encoded_png = b64encode(png).decode("ascii")
-    logger.info("sprite blueprint render ui request completed", extra={"recipe": report["recipe"], "seed": report["seed"]})
+    logger.info(
+        "sprite blueprint render ui request completed", extra={"recipe": report["recipe"], "seed": report["seed"]}
+    )
     return templates.TemplateResponse(
         request=request,
         name="partials/sprite_preview.html",

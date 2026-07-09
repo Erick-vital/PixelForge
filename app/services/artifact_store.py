@@ -78,8 +78,17 @@ class ArtifactStore:
                 ),
             )
             conn.commit()
-        logger.info("workflow run saved", extra={"run_id": run_id, "run_dir": str(run_dir), "input_chars": len(workflow_input.input_text)})
-        return SavedRun(run_id=run_id, run_dir=run_dir, input_json_path=input_json_path, output_json_path=output_json_path, report_markdown_path=report_markdown_path)
+        logger.info(
+            "workflow run saved",
+            extra={"run_id": run_id, "run_dir": str(run_dir), "input_chars": len(workflow_input.input_text)},
+        )
+        return SavedRun(
+            run_id=run_id,
+            run_dir=run_dir,
+            input_json_path=input_json_path,
+            output_json_path=output_json_path,
+            report_markdown_path=report_markdown_path,
+        )
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)

@@ -19,9 +19,17 @@ def _baby_dragon_spec() -> AssetSpec:
             "game_view": "top-down 3/4",
             "style": "pixel art fantasy",
             "size": {"width": 64, "height": 64},
-            "palette": {"main": ["orange", "dark red", "gold"], "shadows": ["purple", "dark blue"], "accent": ["yellow glow"]},
+            "palette": {
+                "main": ["orange", "dark red", "gold"],
+                "shadows": ["purple", "dark blue"],
+                "accent": ["yellow glow"],
+            },
             "shape": {"silhouette": "small compact dragon with large head, tiny wings, curled tail", "proportions": {}},
-            "technical_constraints": {"transparent_background": True, "pixel_art": True, "readable_at_small_size": True},
+            "technical_constraints": {
+                "transparent_background": True,
+                "pixel_art": True,
+                "readable_at_small_size": True,
+            },
         }
     )
 
@@ -106,7 +114,7 @@ def test_procedural_render_scales_content_with_canvas_size(subject, size):
     assert bbox is not None
     scale = size / 64
     tolerance = max(2, 2 * scale)
-    for base_coord, coord in zip(base_bbox, bbox):
+    for base_coord, coord in zip(base_bbox, bbox, strict=True):
         assert abs(coord - base_coord * scale) <= tolerance
 
 

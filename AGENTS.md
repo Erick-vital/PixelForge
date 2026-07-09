@@ -33,6 +33,7 @@ Avoid adding domain-specific behavior unless the repo is explicitly being specia
 
 Before finishing changes:
 
+- Run `uv run ruff check .` and `uv run ruff format --check .` (use `--fix` / drop `--check` to apply)
 - Run `uv run pytest -q`
 - If you touch runtime behavior, verify the app starts with `uv run uvicorn app.main:app`
 - Prefer adding or updating tests when behavior changes

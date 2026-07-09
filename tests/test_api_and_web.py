@@ -21,7 +21,7 @@ def test_pages_render_with_active_menu():
     assert sprite.status_code == 200
     assert 'hx-post="/ui/sprite/spec"' in sprite.text
     assert 'hx-target="#results"' in sprite.text
-    assert 'Prompt to Sprite Processing Instructions' in sprite.text
+    assert "Prompt to Sprite Processing Instructions" in sprite.text
     assert '<a href="/sprite" class="active" aria-current="page">' in sprite.text
 
     settings = client.get("/settings")

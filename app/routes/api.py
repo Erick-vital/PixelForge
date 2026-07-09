@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import ValidationError
 
+from app.schemas.settings import SettingsResponse
 from app.schemas.sprite import (
     AssetSpec,
     AssetSpecRequest,
@@ -15,11 +16,16 @@ from app.schemas.sprite import (
     ProcessingPlanResponse,
     RenderBlueprintRequest,
     RenderSpriteRequest,
-    SpriteBlueprintRequest,
     SpriteBlueprint,
+    SpriteBlueprintRequest,
 )
-from app.schemas.settings import SettingsResponse
-from app.services.settings import env_file_path, get_app_settings, get_llm_base_url, get_llm_default_model, get_llm_provider
+from app.services.settings import (
+    env_file_path,
+    get_app_settings,
+    get_llm_base_url,
+    get_llm_default_model,
+    get_llm_provider,
+)
 from app.services.sprite import SpriteError, SpriteService
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -45,7 +51,9 @@ def _render_response(png: bytes, report: dict[str, object]) -> Response:
 
 
 @router.post("/asset-spec", response_model=AssetSpec)
-async def create_asset_spec(payload: AssetSpecRequest, service: SpriteService = Depends(get_sprite_service)) -> AssetSpec:
+async def create_asset_spec(
+    payload: AssetSpecRequest, service: SpriteService = Depends(get_sprite_service)
+) -> AssetSpec:
     try:
         return await service.create_asset_spec(payload)
     except SpriteError as exc:
@@ -53,12 +61,16 @@ async def create_asset_spec(payload: AssetSpecRequest, service: SpriteService = 
 
 
 @router.post("/generation-prompt", response_model=GenerationPromptResponse)
-def generation_prompt(payload: GenerationPromptRequest, service: SpriteService = Depends(get_sprite_service)) -> GenerationPromptResponse:
+def generation_prompt(
+    payload: GenerationPromptRequest, service: SpriteService = Depends(get_sprite_service)
+) -> GenerationPromptResponse:
     return service.create_generation_prompt(payload.asset_spec)
 
 
 @router.post("/processing-plan", response_model=ProcessingPlanResponse)
-def processing_plan(payload: ProcessingPlanRequest, service: SpriteService = Depends(get_sprite_service)) -> ProcessingPlanResponse:
+def processing_plan(
+    payload: ProcessingPlanRequest, service: SpriteService = Depends(get_sprite_service)
+) -> ProcessingPlanResponse:
     return service.create_processing_plan(payload.asset_spec)
 
 
@@ -84,7 +96,9 @@ def render_sprite(payload: RenderSpriteRequest, service: SpriteService = Depends
 @router.post("/render-blueprint")
 def render_blueprint(payload: RenderBlueprintRequest, service: SpriteService = Depends(get_sprite_service)) -> Response:
     try:
-        png, report = service.render_blueprint(payload.blueprint, width=payload.width, height=payload.height, seed=payload.seed)
+        png, report = service.render_blueprint(
+            payload.blueprint, width=payload.width, height=payload.height, seed=payload.seed
+        )
     except SpriteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _render_response(png, report)

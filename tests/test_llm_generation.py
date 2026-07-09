@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import ClassVar
 
 import httpx
 import pytest
@@ -11,7 +12,7 @@ from app.services.settings import MissingLlmApiKeyError, get_llm_model
 
 
 class FakeAsyncClient:
-    calls: list[dict] = []
+    calls: ClassVar[list[dict]] = []
 
     def __init__(self, timeout):
         self.timeout = timeout
