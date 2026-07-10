@@ -4,12 +4,57 @@ import asyncio
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from app.schemas.sprite import AssetSpec, SpriteBlueprint, SpritePrimitive
 from app.services.llm_generation import LlmGenerationProviderError, LlmGenerationResult
 from app.services.sprite import SpriteService
 from app.services.sprite_artifact_store import SpriteArtifactStore
 from app.services.sprite_blueprint import BlueprintGenerationError, generate_sprite_blueprint
+
+
+def test_blueprint_without_outline_uses_legacy_disabled_default():
+    blueprint = SpriteBlueprint.model_validate(
+        {
+            "recipe": "legacy",
+            "subject": "legacy prop",
+            "palette": {"base": "#123456"},
+            "primitives": [{"op": "rectangle", "fill": "base", "bbox": [16, 16, 48, 48]}],
+        }
+    )
+
+    assert blueprint.outline.enabled is False
+    assert blueprint.outline.color_key == "outline"
+    assert blueprint.outline.width == 1
+
+
+def test_blueprint_accepts_a_bounded_outline_configuration():
+    blueprint = SpriteBlueprint.model_validate(
+        {
+            "recipe": "outlined",
+            "subject": "outlined prop",
+            "palette": {"outline": "#101010", "base": "#123456"},
+            "primitives": [{"op": "rectangle", "fill": "base", "bbox": [16, 16, 48, 48]}],
+            "outline": {"enabled": True, "color_key": "outline", "width": 1},
+        }
+    )
+
+    assert blueprint.outline.enabled is True
+    assert blueprint.outline.width == 1
+
+
+@pytest.mark.parametrize("width", [0, 5])
+def test_blueprint_rejects_outline_width_outside_supported_range(width):
+    with pytest.raises(ValidationError):
+        SpriteBlueprint.model_validate(
+            {
+                "recipe": "outlined",
+                "subject": "outlined prop",
+                "palette": {"outline": "#101010", "base": "#123456"},
+                "primitives": [{"op": "rectangle", "fill": "base", "bbox": [16, 16, 48, 48]}],
+                "outline": {"enabled": True, "color_key": "outline", "width": width},
+            }
+        )
 
 
 class FakeBlueprintLlm:

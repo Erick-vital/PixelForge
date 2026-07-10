@@ -141,11 +141,18 @@ class SpritePrimitive(BaseModel):
     size: int | None = None
 
 
+class SpriteOutlineSpec(BaseModel):
+    enabled: bool = False
+    color_key: str = "outline"
+    width: int = Field(default=1, ge=1, le=4)
+
+
 class SpriteBlueprint(BaseModel):
     recipe: str
     subject: str
     palette: dict[str, str]
     primitives: list[SpritePrimitive]
+    outline: SpriteOutlineSpec = Field(default_factory=SpriteOutlineSpec)
     notes: list[str] = Field(default_factory=list)
 
 

@@ -8,7 +8,8 @@ from typing import Any, cast
 import numpy as np
 from PIL import Image, ImageDraw
 
-from app.schemas.sprite import AssetSpec, SpriteBlueprint, SpritePrimitive
+from app.schemas.sprite import AssetSpec, SpriteBlueprint, SpriteOutlineSpec, SpritePrimitive
+from app.services.humanoid_sprite import compile_humanoid_base
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ def build_sprite_blueprint(asset_spec: AssetSpec, *, seed: int = 0) -> SpriteBlu
         return _blueprint_for_potion(asset_spec.subject, palette, rng)
     if recipe == "sword":
         return _blueprint_for_sword(asset_spec.subject, palette, rng)
+    if recipe == "humanoid_chibi":
+        return compile_humanoid_base(asset_spec.subject, palette)
     return _blueprint_for_generic_prop(asset_spec.subject, palette, rng)
 
 
@@ -65,19 +68,13 @@ def _blueprint_for_baby_dragon(subject: str, palette: dict[str, str], rng: np.ra
     cx = 32 + int(rng.integers(-1, 2))
     cy = 34
     primitives = [
-        _poly([(cx - 13, cy - 5), (cx - 27, cy - 15), (cx - 21, cy + 5), (cx - 12, cy + 3)], "outline"),
-        _poly([(cx + 13, cy - 5), (cx + 27, cy - 15), (cx + 21, cy + 5), (cx + 12, cy + 3)], "outline"),
         _poly([(cx - 14, cy - 5), (cx - 24, cy - 12), (cx - 20, cy + 2), (cx - 12, cy + 1)], "shadow"),
         _poly([(cx + 14, cy - 5), (cx + 24, cy - 12), (cx + 20, cy + 2), (cx + 12, cy + 1)], "shadow"),
         _line([(cx + 8, cy + 10), (cx + 18, cy + 16), (cx + 22, cy + 9)], "outline", width=2),
         _line([(cx + 8, cy + 9), (cx + 17, cy + 14), (cx + 20, cy + 9)], "base", width=1),
-        _ellipse((cx - 13, cy - 7, cx + 13, cy + 15), "outline"),
         _ellipse((cx - 11, cy - 5, cx + 11, cy + 13), "base"),
         _ellipse((cx - 9, cy + 2, cx + 9, cy + 13), "highlight"),
-        _ellipse((cx - 15, cy - 22, cx + 15, cy + 6), "outline"),
         _ellipse((cx - 13, cy - 20, cx + 13, cy + 4), "base"),
-        _poly([(cx - 8, cy - 18), (cx - 4, cy - 28), (cx - 1, cy - 17)], "outline"),
-        _poly([(cx + 8, cy - 18), (cx + 4, cy - 28), (cx + 1, cy - 17)], "outline"),
         _poly([(cx - 7, cy - 18), (cx - 4, cy - 25), (cx - 2, cy - 17)], "accent"),
         _poly([(cx + 7, cy - 18), (cx + 4, cy - 25), (cx + 2, cy - 17)], "accent"),
         _point(cx - 6, cy - 9, "outline", size=2),
@@ -94,6 +91,7 @@ def _blueprint_for_baby_dragon(subject: str, palette: dict[str, str], rng: np.ra
         subject=subject,
         palette=palette,
         primitives=primitives,
+        outline=SpriteOutlineSpec(enabled=True),
         notes=["procedural dragon recipe", "compact top-down readable silhouette"],
     )
 
@@ -102,17 +100,19 @@ def _blueprint_for_potion(subject: str, palette: dict[str, str], rng: np.random.
     cx = 32 + int(rng.integers(-1, 2))
     cy = 32 + int(rng.integers(-1, 2))
     primitives = [
-        _ellipse((cx - 13, cy - 3, cx + 13, cy + 20), "outline"),
         _ellipse((cx - 11, cy - 1, cx + 11, cy + 18), "base"),
-        _rectangle((cx - 6, cy - 17, cx + 6, cy - 2), "outline"),
         _rectangle((cx - 4, cy - 15, cx + 4, cy - 2), "highlight"),
-        _rectangle((cx - 8, cy - 20, cx + 8, cy - 15), "outline"),
         _rectangle((cx - 6, cy - 19, cx + 6, cy - 16), "accent"),
         _poly([(cx - 9, cy + 8), (cx - 1, cy + 16), (cx - 11, cy + 16)], "shadow"),
         _point(cx + 5, cy + 4, "accent", size=2),
     ]
     return SpriteBlueprint(
-        recipe="potion", subject=subject, palette=palette, primitives=primitives, notes=["procedural potion recipe"]
+        recipe="potion",
+        subject=subject,
+        palette=palette,
+        primitives=primitives,
+        outline=SpriteOutlineSpec(enabled=True),
+        notes=["procedural potion recipe"],
     )
 
 
@@ -121,18 +121,19 @@ def _blueprint_for_sword(subject: str, palette: dict[str, str], rng: np.random.G
     cx = 32 + int(rng.integers(-1, 2))
     cy = 32
     primitives = [
-        _poly([(cx, cy - 27), (cx + 7, cy + 2), (cx, cy + 11), (cx - 7, cy + 2)], "outline"),
         _poly([(cx, cy - 24), (cx + 4, cy + 1), (cx, cy + 8), (cx - 4, cy + 1)], "base"),
         _line([(cx, cy - 21), (cx, cy + 6)], "highlight", width=1),
-        _rectangle((cx - 15, cy + 8, cx + 15, cy + 13), "outline"),
         _rectangle((cx - 12, cy + 9, cx + 12, cy + 11), "accent"),
-        _rectangle((cx - 4, cy + 12, cx + 4, cy + 27), "outline"),
         _rectangle((cx - 2, cy + 13, cx + 2, cy + 24), "shadow"),
-        _ellipse((cx - 5, cy + 23, cx + 5, cy + 31), "outline"),
         _ellipse((cx - 3, cy + 24, cx + 3, cy + 29), "accent"),
     ]
     return SpriteBlueprint(
-        recipe="sword", subject=subject, palette=palette, primitives=primitives, notes=["procedural sword recipe"]
+        recipe="sword",
+        subject=subject,
+        palette=palette,
+        primitives=primitives,
+        outline=SpriteOutlineSpec(enabled=True),
+        notes=["procedural sword recipe"],
     )
 
 
@@ -159,6 +160,12 @@ def render_blueprint(
     for primitive in blueprint.primitives:
         _render_primitive(draw, _scale_primitive(primitive, scale_x, scale_y), palette)
 
+    if blueprint.outline.enabled:
+        if blueprint.outline.color_key not in palette:
+            raise ProceduralSpriteError(f"outline color key {blueprint.outline.color_key!r} is not in the palette")
+        outline_width = max(1, round(blueprint.outline.width * min(scale_x, scale_y)))
+        canvas = _apply_outline_pass(canvas, color=palette[blueprint.outline.color_key], width=outline_width)
+
     canvas = _limit_palette(canvas, max_colors=max_colors)
     png = _to_png(canvas)
     report = _build_report(canvas, recipe=blueprint.recipe, seed=seed, primitive_count=len(blueprint.primitives))
@@ -170,7 +177,6 @@ def _blueprint_for_generic_prop(subject: str, palette: dict[str, str], rng: np.r
     cx = 32 + int(rng.integers(-2, 3))
     cy = 32 + int(rng.integers(-2, 3))
     primitives = [
-        _ellipse((cx - 15, cy - 15, cx + 15, cy + 15), "outline"),
         _ellipse((cx - 12, cy - 12, cx + 12, cy + 12), "base"),
         _ellipse((cx - 8, cy - 8, cx + 4, cy + 4), "highlight"),
     ]
@@ -179,6 +185,7 @@ def _blueprint_for_generic_prop(subject: str, palette: dict[str, str], rng: np.r
         subject=subject,
         palette=palette,
         primitives=primitives,
+        outline=SpriteOutlineSpec(enabled=True),
         notes=["generic procedural prop recipe"],
     )
 
@@ -231,7 +238,26 @@ def _render_primitive(
     raise ProceduralSpriteError(f"Unsupported primitive op: {primitive.op}")
 
 
-def _recipe_for(subject: str) -> str:
+def _apply_outline_pass(image: Image.Image, *, color: tuple[int, int, int, int], width: int) -> Image.Image:
+    alpha_mask = np.asarray(image.getchannel("A")) > 0
+    padded = np.pad(alpha_mask, width, mode="constant", constant_values=False)
+    dilated = np.zeros_like(alpha_mask)
+    image_height, image_width = alpha_mask.shape
+    for y_offset in range(2 * width + 1):
+        for x_offset in range(2 * width + 1):
+            np.logical_or(
+                dilated,
+                padded[y_offset : y_offset + image_height, x_offset : x_offset + image_width],
+                out=dilated,
+            )
+    outline_mask = np.logical_and(dilated, np.logical_not(alpha_mask))
+    outline_pixels = np.zeros((image_height, image_width, 4), dtype=np.uint8)
+    outline_pixels[outline_mask] = color
+    outline_layer = Image.fromarray(outline_pixels, mode="RGBA")
+    return Image.alpha_composite(outline_layer, image)
+
+
+def known_procedural_recipe(subject: str) -> str | None:
     normalized = subject.lower().replace(" ", "_")
     if "dragon" in normalized:
         return "baby_dragon"
@@ -239,7 +265,13 @@ def _recipe_for(subject: str) -> str:
         return "potion"
     if "sword" in normalized:
         return "sword"
-    return "generic_prop"
+    if any(token in normalized for token in ("human", "humanoid", "person", "chibi")):
+        return "humanoid_chibi"
+    return None
+
+
+def _recipe_for(subject: str) -> str:
+    return known_procedural_recipe(subject) or "generic_prop"
 
 
 def _palette_for(asset_spec: AssetSpec) -> dict[str, str]:

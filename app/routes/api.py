@@ -41,6 +41,16 @@ def _render_response(png: bytes, report: dict[str, object], *, artifact_id: str 
         "X-PixelForge-Validation-Non-Empty": str(report["non_empty"]).lower(),
         "X-PixelForge-Validation-Colors": str(report["color_count"]),
     }
+    quality = report.get("quality")
+    if isinstance(quality, dict):
+        headers.update(
+            {
+                "X-PixelForge-Quality-Passed": str(quality["passed"]).lower(),
+                "X-PixelForge-Quality-Components": str(quality["connected_components"]),
+                "X-PixelForge-Quality-Occupancy": str(quality["occupancy_ratio"]),
+                "X-PixelForge-Quality-Isolated-Pixels": str(quality["isolated_pixel_count"]),
+            }
+        )
     if artifact_id:
         headers["X-PixelForge-Artifact-Id"] = artifact_id
     return Response(content=png, media_type="image/png", headers=headers)

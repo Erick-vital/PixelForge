@@ -84,6 +84,39 @@ def test_renderer_draws_a_general_blueprint_without_subject_specific_code():
     assert result.report["primitive_count"] == 4
 
 
+def test_outline_pass_adds_a_one_pixel_ring_without_changing_the_shape_interior():
+    blueprint = SpriteBlueprint(
+        recipe="outlined_square",
+        subject="outlined square",
+        palette={"outline": "#101010", "base": "#5b7cfa"},
+        primitives=[SpritePrimitive(op="rectangle", bbox=(20, 20, 43, 43), fill="base")],
+        outline={"enabled": True, "color_key": "outline", "width": 1},
+    )
+
+    image = Image.open(io.BytesIO(render_blueprint(blueprint, width=64, height=64).png_bytes)).convert("RGBA")
+
+    assert image.getpixel((20, 20)) == (91, 124, 250, 255)
+    assert image.getpixel((19, 20)) == (16, 16, 16, 255)
+    assert image.getpixel((20, 19)) == (16, 16, 16, 255)
+    assert image.getpixel((19, 19)) == (16, 16, 16, 255)
+    assert image.getpixel((18, 20))[3] == 0
+
+
+def test_outline_pass_does_not_wrap_when_a_shape_touches_canvas_edge():
+    blueprint = SpriteBlueprint(
+        recipe="edge_square",
+        subject="edge square",
+        palette={"outline": "#101010", "base": "#5b7cfa"},
+        primitives=[SpritePrimitive(op="rectangle", bbox=(0, 20, 3, 23), fill="base")],
+        outline={"enabled": True, "color_key": "outline", "width": 1},
+    )
+
+    image = Image.open(io.BytesIO(render_blueprint(blueprint, width=64, height=64).png_bytes)).convert("RGBA")
+
+    assert image.getpixel((63, 20))[3] == 0
+    assert image.getpixel((4, 20)) == (16, 16, 16, 255)
+
+
 def test_procedural_renderer_supports_first_phase_subject_recipes():
     cases = [
         ("potion", "potion"),

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from io import BytesIO
+
+from PIL import Image
 
 from app.models.sprite_artifact import SpriteArtifact
 from app.schemas.sprite import AssetSpec, AssetSpecRequest, BlueprintStrategy, SpriteBlueprint
@@ -15,6 +18,7 @@ from app.services.sprite_artifact_store import SpriteArtifactStore, SpriteArtifa
 from app.services.sprite_blueprint import BlueprintGenerationError, generate_sprite_blueprint
 from app.services.sprite_interpretation import SpriteSpecError, create_asset_spec_from_request
 from app.services.sprite_processing import SpriteProcessingError, process_sprite_image
+from app.services.sprite_quality import SpriteQualityError, require_sprite_quality
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +132,10 @@ class SpriteService:
                 )
             else:
                 result = render_procedural_sprite(asset_spec, seed=seed)
+            quality = require_sprite_quality(Image.open(BytesIO(result.png_bytes)))
+            result.report["quality"] = quality.as_dict()
             store.save_render_png(artifact_id, result.png_bytes)
-        except (ProceduralSpriteError, SpriteArtifactStoreError) as exc:
+        except (ProceduralSpriteError, SpriteArtifactStoreError, SpriteQualityError) as exc:
             raise SpriteError(str(exc)) from exc
         return result.png_bytes, result.report
 
@@ -146,8 +152,10 @@ class SpriteService:
                 seed=seed,
                 max_colors=asset_spec.processing_profile.palette_max_colors,
             )
+            quality = require_sprite_quality(Image.open(BytesIO(result.png_bytes)))
+            result.report["quality"] = quality.as_dict()
             store.save_render_png(artifact_id, result.png_bytes)
-        except (ProceduralSpriteError, SpriteArtifactStoreError) as exc:
+        except (ProceduralSpriteError, SpriteArtifactStoreError, SpriteQualityError) as exc:
             raise SpriteError(str(exc)) from exc
         logger.info(
             "sprite blueprint render completed",

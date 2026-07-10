@@ -72,11 +72,11 @@ Builds and stores a validated blueprint from an existing sprite artifact.
 
 `strategy` accepts:
 
-- `auto` (default): procedural recipe for known subjects (`dragon`, `potion`, `sword`), otherwise an LLM blueprint
+- `auto` (default): procedural recipe for known subjects (`dragon`, `potion`, `sword`, `human`/`humanoid`/`person`/`chibi`), otherwise an LLM blueprint
 - `llm_blueprint`: always request a strict JSON blueprint from the configured LLM
 - `procedural`: always use the local procedural recipe, including its intentional generic fallback
 
-LLM blueprints are parsed as `SpriteBlueprint`, validated for palette references, primitive count, primitive shape requirements, and `0..63` canvas coordinates before persistence.
+LLM blueprints are parsed as `SpriteBlueprint`, validated for palette references, primitive count, primitive shape requirements, `0..63` canvas coordinates, and minimum raster quality before persistence. New blueprints can use the persisted automatic outline pass rather than duplicating outline primitives manually.
 
 Example:
 
@@ -111,6 +111,7 @@ The first render recipes support:
 - `baby dragon`
 - `potion`
 - `sword`
+- `human chibi` / `humanoid chibi`
 
 ### `POST /api/render-blueprint`
 
@@ -162,8 +163,12 @@ Interpretation and processing are now separated in code:
 - `app/services/sprite_artifact_store.py` persists sprite artifact items on disk and in SQLite
 - `app/services/procedural_sprite.py` handles known local blueprint recipes and model-free procedural PNG rendering
 - `app/services/sprite_blueprint.py` selects the strategy, generates LLM blueprint JSON, and validates it before rendering
+- `app/services/sprite_quality.py` validates rendered alpha connectivity, canvas occupancy, and isolated pixels before a render is persisted
+- `app/models/humanoid.py` and `app/services/humanoid_sprite.py` define and compile the first procedural humanoid chibi base
 - `app/services/sprite_processing.py` handles image processing with Pillow
 - `app/services/sprite.py` is the orchestration layer used by the API and UI
+
+For the current end-to-end architecture, see [docs/architecture.md](docs/architecture.md).
 
 ## Run
 
