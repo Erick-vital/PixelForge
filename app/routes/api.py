@@ -64,11 +64,18 @@ async def create_asset_spec(
 
 
 @router.post("/blueprint", response_model=SpriteArtifactBlueprintResponse)
-def blueprint(
+async def blueprint(
     payload: SpriteBlueprintRequest, service: SpriteService = Depends(get_sprite_service)
 ) -> SpriteArtifactBlueprintResponse:
     try:
-        blueprint, artifact = service.create_sprite_blueprint(payload.artifact_id, seed=payload.seed)
+        blueprint, artifact = await service.create_sprite_blueprint(
+            payload.artifact_id,
+            strategy=payload.strategy,
+            seed=payload.seed,
+            provider=payload.provider,
+            model=payload.model,
+            base_url=payload.base_url,
+        )
         asset_spec = service.get_asset_spec(payload.artifact_id)
     except SpriteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -92,9 +99,7 @@ def render_sprite(payload: RenderSpriteRequest, service: SpriteService = Depends
 
 
 @router.post("/render-blueprint")
-def render_blueprint(
-    payload: RenderBlueprintRequest, service: SpriteService = Depends(get_sprite_service)
-) -> Response:
+def render_blueprint(payload: RenderBlueprintRequest, service: SpriteService = Depends(get_sprite_service)) -> Response:
     try:
         png, report = service.render_blueprint(payload.artifact_id, seed=payload.seed)
     except SpriteError as exc:

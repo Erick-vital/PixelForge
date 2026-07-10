@@ -134,7 +134,7 @@ def test_render_sprite_endpoint_returns_png_from_asset_artifact():
     client = TestClient(app)
     artifact = client.post(
         "/api/asset-spec",
-        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64"},
+        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64", "use_llm": False},
     ).json()
 
     response = client.post("/api/render-sprite", json={"artifact_id": artifact["artifact_id"], "seed": 123})
@@ -153,7 +153,7 @@ def test_blueprint_and_render_blueprint_endpoints_round_trip():
     client = TestClient(app)
     artifact = client.post(
         "/api/asset-spec",
-        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64"},
+        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64", "use_llm": False},
     ).json()
 
     blueprint_response = client.post("/api/blueprint", json={"artifact_id": artifact["artifact_id"], "seed": 55})

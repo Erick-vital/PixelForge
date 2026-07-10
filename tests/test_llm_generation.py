@@ -64,3 +64,56 @@ def test_anthropic_model_aliases(monkeypatch):
     monkeypatch.setenv("APP_LLM_PROVIDER", "anthropic")
     assert get_llm_model("Sonnet", provider="anthropic") == "claude-sonnet-5"
     assert get_llm_model("Haiku", provider="anthropic") == "claude-haiku-4-5-20251001"
+
+
+def test_anthropic_request_explicitly_enables_adaptive_thinking(monkeypatch):
+    captured_payload = {}
+
+    async def fake_post_json(**kwargs):
+        captured_payload.update(kwargs["payload"])
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        return httpx.Response(
+            200, request=request, json={"stop_reason": "end_turn", "content": [{"type": "text", "text": "{}"}]}
+        )
+
+    monkeypatch.setattr(llm_generation, "_post_json", fake_post_json)
+
+    result = asyncio.run(
+        llm_generation._post_anthropic_message(
+            system_prompt="s",
+            prompt="p",
+            api_key="test",
+            model="claude-sonnet-5",
+            base_url="https://api.anthropic.com",
+            timeout_seconds=1,
+            max_tokens=100,
+        )
+    )
+
+    assert result == "{}"
+    assert captured_payload["thinking"] == {"type": "adaptive"}
+
+
+def test_anthropic_empty_text_error_reports_stop_reason_and_block_types(monkeypatch):
+    async def fake_post_json(**kwargs):
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        return httpx.Response(
+            200, request=request, json={"stop_reason": "max_tokens", "content": [{"type": "thinking"}]}
+        )
+
+    monkeypatch.setattr(llm_generation, "_post_json", fake_post_json)
+
+    with pytest.raises(
+        llm_generation.LlmGenerationProviderError, match=r"stop_reason=max_tokens; content_types=thinking"
+    ):
+        asyncio.run(
+            llm_generation._post_anthropic_message(
+                system_prompt="s",
+                prompt="p",
+                api_key="test",
+                model="claude-test",
+                base_url="https://api.anthropic.com",
+                timeout_seconds=1,
+                max_tokens=100,
+            )
+        )

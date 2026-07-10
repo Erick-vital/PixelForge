@@ -7,8 +7,8 @@ The product focus is:
 1. Receive a natural-language prompt
 2. Convert it into a canonical Asset Spec
 3. Persist that spec as a sprite artifact item
-4. Build a procedural blueprint from the artifact
-5. Render a first-pass procedural PNG from the artifact
+4. Generate a validated Sprite Blueprint using a known procedural recipe or an LLM
+5. Render the stored blueprint into a deterministic PNG
 6. Optionally process an input sprite into a transparent PNG
 7. Offer a simple browser front with a text box and button for the main prompt flow
 
@@ -34,6 +34,7 @@ The browser front lives at:
 
 It has:
 - a text box for the prompt
+- a visible blueprint strategy selector (`auto`, `llm_blueprint`, or `procedural`)
 - a button to generate the result
 - inline loading/success/error feedback
 - an HTMX results panel that shows:
@@ -67,7 +68,15 @@ Response includes:
 
 ### `POST /api/blueprint`
 
-Builds and stores a procedural blueprint from an existing sprite artifact.
+Builds and stores a validated blueprint from an existing sprite artifact.
+
+`strategy` accepts:
+
+- `auto` (default): procedural recipe for known subjects (`dragon`, `potion`, `sword`), otherwise an LLM blueprint
+- `llm_blueprint`: always request a strict JSON blueprint from the configured LLM
+- `procedural`: always use the local procedural recipe, including its intentional generic fallback
+
+LLM blueprints are parsed as `SpriteBlueprint`, validated for palette references, primitive count, primitive shape requirements, and `0..63` canvas coordinates before persistence.
 
 Example:
 
@@ -76,13 +85,14 @@ curl -X POST http://127.0.0.1:8025/api/blueprint \
   -H "Content-Type: application/json" \
   -d '{
     "artifact_id": "sprite_20260709_190000_abcd1234",
+    "strategy": "llm_blueprint",
     "seed": 123
   }'
 ```
 
 ### `POST /api/render-sprite`
 
-Renders a first-pass procedural PNG directly from an existing sprite artifact. This path does not call an image model.
+Renders the stored blueprint when one exists; otherwise it renders a first-pass local procedural PNG from the Asset Spec. This path does not call an image model.
 
 Example:
 
@@ -150,7 +160,8 @@ Interpretation and processing are now separated in code:
 
 - `app/services/sprite_interpretation.py` handles prompt interpretation
 - `app/services/sprite_artifact_store.py` persists sprite artifact items on disk and in SQLite
-- `app/services/procedural_sprite.py` handles blueprint creation and model-free procedural PNG rendering
+- `app/services/procedural_sprite.py` handles known local blueprint recipes and model-free procedural PNG rendering
+- `app/services/sprite_blueprint.py` selects the strategy, generates LLM blueprint JSON, and validates it before rendering
 - `app/services/sprite_processing.py` handles image processing with Pillow
 - `app/services/sprite.py` is the orchestration layer used by the API and UI
 

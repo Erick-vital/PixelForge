@@ -6,12 +6,30 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
+from app.schemas.sprite import AssetSpec, AssetSpecRequest
+
+
+def test_asset_spec_request_uses_llm_by_default():
+    assert AssetSpecRequest(prompt="heart").use_llm is True
+
+
+def test_asset_spec_normalizes_numeric_shape_proportions_from_llm_json():
+    spec = AssetSpec.model_validate(
+        {
+            "shape": {
+                "silhouette": "symmetric heart",
+                "proportions": {"width_ratio": 1.0, "height_ratio": 1.0},
+            }
+        }
+    )
+
+    assert spec.shape.proportions == {"width_ratio": "1.0", "height_ratio": "1.0"}
 
 
 def test_asset_spec_endpoint_creates_sprite_artifact_and_structured_pixel_art_spec():
     response = TestClient(app).post(
         "/api/asset-spec",
-        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64"},
+        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64", "use_llm": False},
     )
 
     assert response.status_code == 200
@@ -34,7 +52,7 @@ def test_blueprint_endpoint_uses_sprite_artifact_id_and_persists_blueprint():
     client = TestClient(app)
     artifact = client.post(
         "/api/asset-spec",
-        json={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down"},
+        json={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down", "use_llm": False},
     ).json()
 
     response = client.post("/api/blueprint", json={"artifact_id": artifact["artifact_id"], "seed": 123})

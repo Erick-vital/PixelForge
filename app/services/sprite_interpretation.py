@@ -32,7 +32,7 @@ game_view: one of side-view, top-down 3/4, icon/front
 style: pixel art style phrase
 size: {width: 32|64|128, height: 32|64|128}
 palette: {main: string[], shadows: string[], accent: string[]}
-shape: {silhouette: string, proportions: object}
+shape: {silhouette: string, proportions: object mapping labels to short string values; use strings such as \"1.0\" for numeric ratios}
 technical_constraints: {transparent_background: true, pixel_art: true, readable_at_small_size: true}
 prompt_guidance: {target_prompt_tone: string, include_size: boolean, include_style: boolean, include_negative_prompt: boolean, normalize_subject_to_english: boolean}
 processing_profile: {resize_mode: nearest-neighbor, palette_max_colors: integer, center_sprite: boolean, transparent_background: boolean, export_format: png}

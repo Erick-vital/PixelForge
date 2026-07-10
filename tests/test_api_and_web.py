@@ -19,6 +19,8 @@ def test_pages_render_with_active_menu():
     assert sprite.status_code == 200
     assert 'hx-post="/ui/sprite/spec"' in sprite.text
     assert 'hx-target="#results"' in sprite.text
+    assert 'name="blueprint_strategy"' in sprite.text
+    assert 'value="auto" selected' in sprite.text
     assert "Prompt to Sprite Processing Instructions" in sprite.text
     assert '<a href="/sprite" class="active" aria-current="page">' in sprite.text
 
@@ -30,7 +32,7 @@ def test_pages_render_with_active_menu():
 def test_sprite_api_turns_prompt_into_structured_asset_spec():
     response = TestClient(app).post(
         "/api/asset-spec",
-        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64"},
+        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64", "use_llm": False},
     )
 
     assert response.status_code == 200
@@ -44,11 +46,12 @@ def test_sprite_api_turns_prompt_into_structured_asset_spec():
 def test_sprite_htmx_form_returns_structured_asset_spec_json():
     response = TestClient(app).post(
         "/ui/sprite/spec",
-        data={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down"},
+        data={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down", "use_llm": "false"},
     )
 
     assert response.status_code == 200
     assert "Sprite result" in response.text
+    assert "Receta generada:" in response.text
     assert "Artifact ID:" in response.text
     assert "Blueprint JSON" in response.text
     assert '"subject": "baby dragon"' in response.text
@@ -63,7 +66,7 @@ def test_sprite_render_htmx_returns_preview_image():
     client = TestClient(app)
     artifact = client.post(
         "/api/asset-spec",
-        json={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down"},
+        json={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down", "use_llm": False},
     ).json()
 
     blueprint = client.post(

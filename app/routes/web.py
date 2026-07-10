@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.schemas.sprite import AssetSpecRequest
+from app.schemas.sprite import AssetSpecRequest, BlueprintStrategy
 from app.services.settings import (
     env_file_path,
     get_app_settings,
@@ -61,12 +61,19 @@ def llm_page(request: Request) -> HTMLResponse:
 async def run_sprite_spec_ui(
     request: Request,
     prompt: str = Form(...),
+    use_llm: bool = Form(default=True),
+    blueprint_strategy: BlueprintStrategy = Form(default="auto"),
     service: SpriteService = Depends(get_sprite_service),
 ) -> HTMLResponse:
-    logger.info("sprite ui request started", extra={"prompt_chars": len(prompt)})
+    logger.info(
+        "sprite ui request started",
+        extra={"prompt_chars": len(prompt), "use_llm": use_llm, "blueprint_strategy": blueprint_strategy},
+    )
     try:
-        asset_spec, artifact = await service.create_asset_spec(AssetSpecRequest(prompt=prompt))
-        blueprint, _artifact = service.create_sprite_blueprint(artifact.artifact_id, seed=0)
+        asset_spec, artifact = await service.create_asset_spec(AssetSpecRequest(prompt=prompt, use_llm=use_llm))
+        blueprint, _artifact = await service.create_sprite_blueprint(
+            artifact.artifact_id, strategy=blueprint_strategy, seed=0
+        )
     except ValueError as exc:  # includes SpriteError and pydantic ValidationError
         logger.warning("sprite ui request failed", extra={"error": str(exc)})
         return templates.TemplateResponse(
@@ -88,6 +95,7 @@ async def run_sprite_spec_ui(
         name="partials/sprite_result.html",
         context={
             "prompt": prompt,
+            "blueprint_strategy": blueprint_strategy,
             "artifact_id": artifact.artifact_id,
             "artifact_dir": str(artifact.artifact_dir),
             "asset_spec": asset_spec,
@@ -145,7 +153,9 @@ def render_blueprint_ui(
         )
 
     encoded_png = b64encode(png).decode("ascii")
-    logger.info("sprite blueprint render ui request completed", extra={"recipe": report["recipe"], "seed": report["seed"]})
+    logger.info(
+        "sprite blueprint render ui request completed", extra={"recipe": report["recipe"], "seed": report["seed"]}
+    )
     return templates.TemplateResponse(
         request=request,
         name="partials/sprite_preview.html",

@@ -185,6 +185,7 @@ async def _post_anthropic_message(
     payload = {
         "model": model,
         "max_tokens": max_tokens,
+        "thinking": {"type": "adaptive"},
         "system": system_prompt,
         "messages": [{"role": "user", "content": prompt}],
     }
@@ -202,11 +203,22 @@ async def _post_anthropic_message(
         parts = data["content"]
     except (KeyError, TypeError) as exc:
         raise LlmGenerationProviderError("LLM provider returned an unexpected Anthropic response shape") from exc
+    block_types = [str(part.get("type", "unknown")) for part in parts if isinstance(part, dict)]
     texts = [
         str(part["text"])
         for part in parts
         if isinstance(part, dict) and part.get("type") == "text" and part.get("text")
     ]
+    if not texts:
+        stop_reason = str(data.get("stop_reason", "unknown"))
+        content_types = ",".join(block_types) or "none"
+        logger.warning(
+            "anthropic response contained no text blocks",
+            extra={"model": model, "stop_reason": stop_reason, "content_types": content_types},
+        )
+        raise LlmGenerationProviderError(
+            f"LLM provider returned empty content: stop_reason={stop_reason}; content_types={content_types}"
+        )
     return _normalized_content("".join(texts))
 
 

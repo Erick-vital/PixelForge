@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import math
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints, field_validator
 
 AllowedAssetType = Literal["enemy", "prop", "icon"]
 AllowedView = Literal["side-view", "top-down 3/4", "icon/front"]
 AllowedResizeMode = Literal["nearest-neighbor"]
 AllowedExportFormat = Literal["png"]
+BlueprintStrategy = Literal["auto", "procedural", "llm_blueprint"]
 
 
 def _supported_sprite_dimension(value: int) -> int:
@@ -33,6 +35,23 @@ class PaletteSpec(BaseModel):
 class ShapeSpec(BaseModel):
     silhouette: str = "clear readable compact silhouette"
     proportions: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("proportions", mode="before")
+    @classmethod
+    def normalize_numeric_proportions(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        normalized: dict[object, object] = {}
+        for key, proportion in value.items():
+            if isinstance(proportion, bool):
+                normalized[key] = proportion
+            elif isinstance(proportion, (int, float)):
+                if not math.isfinite(proportion):
+                    raise ValueError("shape proportions must be finite")
+                normalized[key] = str(proportion)
+            else:
+                normalized[key] = proportion
+        return normalized
 
 
 class TechnicalConstraints(BaseModel):
@@ -72,7 +91,7 @@ class AssetSpec(BaseModel):
 
 class AssetSpecRequest(BaseModel):
     prompt: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-    use_llm: bool = False
+    use_llm: bool = True
     provider: str | None = None
     model: str | None = None
     base_url: str | None = None
@@ -101,7 +120,11 @@ class RenderSpriteRequest(BaseModel):
 
 class SpriteBlueprintRequest(BaseModel):
     artifact_id: str
+    strategy: BlueprintStrategy = "auto"
     seed: int = 0
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
 
 
 class RenderBlueprintRequest(BaseModel):

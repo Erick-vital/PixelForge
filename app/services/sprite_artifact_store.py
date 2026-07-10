@@ -56,9 +56,11 @@ class SpriteArtifactStore:
         render_png_path = artifact_dir / "render.png"
 
         _write_json(asset_spec_json_path, asset_spec.model_dump(mode="json"))
+        created_at = _iso_now()
         metadata = {
             "artifact_id": artifact_id,
-            "created_at": _iso_now(),
+            "created_at": created_at,
+            "updated_at": created_at,
             "status": "asset_spec_ready",
             "prompt": prompt,
             "subject": asset_spec.subject,
@@ -134,12 +136,14 @@ class SpriteArtifactStore:
             raise SpriteArtifactStoreError(f"Sprite artifact {artifact_id} does not yet have a blueprint")
         return SpriteBlueprint.model_validate(json.loads(artifact.blueprint_json_path.read_text(encoding="utf-8")))
 
-    def save_blueprint(self, artifact_id: str, blueprint: SpriteBlueprint) -> SpriteArtifact:
+    def save_blueprint(
+        self, artifact_id: str, blueprint: SpriteBlueprint, *, generation: dict[str, object] | None = None
+    ) -> SpriteArtifact:
         artifact = self.load_artifact(artifact_id)
         if not artifact.blueprint_json_path:
             raise SpriteArtifactStoreError(f"Sprite artifact {artifact_id} is missing blueprint path")
         _write_json(artifact.blueprint_json_path, blueprint.model_dump(mode="json"))
-        self._update_status(artifact_id, status="blueprint_ready")
+        self._update_status(artifact_id, status="blueprint_ready", blueprint_generation=generation)
         logger.info(
             "sprite blueprint saved",
             extra={"artifact_id": artifact_id, "blueprint_path": str(artifact.blueprint_json_path)},
@@ -166,11 +170,17 @@ class SpriteArtifactStore:
         with self._connect() as conn:
             return conn.execute("SELECT * FROM sprite_artifacts WHERE id = ?", (artifact_id,)).fetchone()
 
-    def _update_status(self, artifact_id: str, *, status: str) -> None:
+    def _update_status(
+        self,
+        artifact_id: str,
+        *,
+        status: str,
+        blueprint_generation: dict[str, object] | None = None,
+    ) -> None:
         with self._connect() as conn:
             conn.execute("UPDATE sprite_artifacts SET status = ? WHERE id = ?", (status, artifact_id))
             conn.commit()
-        self._write_metadata(artifact_id, status=status)
+        self._write_metadata(artifact_id, status=status, blueprint_generation=blueprint_generation)
 
     def _update_render_path(self, artifact_id: str, render_png_path: Path) -> None:
         with self._connect() as conn:
@@ -187,20 +197,28 @@ class SpriteArtifactStore:
         *,
         status: str,
         render_png_path: Path | None = None,
+        blueprint_generation: dict[str, object] | None = None,
     ) -> None:
         artifact = self.load_artifact(artifact_id)
         metadata_path = artifact.artifact_dir / "metadata.json"
+        existing = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
         metadata = {
             "artifact_id": artifact.artifact_id,
-            "created_at": _iso_now(),
+            "created_at": existing.get("created_at", _iso_now()),
+            "updated_at": _iso_now(),
             "status": status,
             "prompt": artifact.prompt,
             "subject": artifact.subject,
             "title": artifact.title,
             "asset_spec_json_path": str(artifact.asset_spec_json_path),
             "blueprint_json_path": str(artifact.blueprint_json_path) if artifact.blueprint_json_path else None,
-            "render_png_path": str(render_png_path or artifact.render_png_path) if (render_png_path or artifact.render_png_path) else None,
+            "render_png_path": str(render_png_path or artifact.render_png_path)
+            if (render_png_path or artifact.render_png_path)
+            else None,
         }
+        saved_generation = blueprint_generation or existing.get("blueprint_generation")
+        if saved_generation is not None:
+            metadata["blueprint_generation"] = saved_generation
         _write_json(metadata_path, metadata)
 
 

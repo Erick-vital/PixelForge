@@ -17,6 +17,13 @@
       <label for="prompt">Prompt
         <textarea id="prompt" name="prompt" rows="7" placeholder="Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down" required>Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down</textarea>
       </label>
+      <label for="blueprint_strategy">Generación de blueprint
+        <select id="blueprint_strategy" name="blueprint_strategy">
+          <option value="auto" selected>Auto: receta local conocida o LLM para objetos nuevos</option>
+          <option value="llm_blueprint">LLM: generar blueprint JSON validado</option>
+          <option value="procedural">Procedural: usar receta local</option>
+        </select>
+      </label>
       <div class="action-row">
         <button id="sprite-submit" type="submit">Generar Sprite Spec</button>
         <span id="sprite-status" class="status" role="status" aria-live="polite"></span>

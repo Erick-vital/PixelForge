@@ -4,18 +4,15 @@ import logging
 from dataclasses import dataclass
 
 from app.models.sprite_artifact import SpriteArtifact
-from app.schemas.sprite import AssetSpec, AssetSpecRequest, SpriteBlueprint
+from app.schemas.sprite import AssetSpec, AssetSpecRequest, BlueprintStrategy, SpriteBlueprint
 from app.services.llm_generation import LlmGenerationService
-from app.services.procedural_sprite import (
-    ProceduralSpriteError,
-    build_sprite_blueprint,
-    render_procedural_sprite,
-)
+from app.services.procedural_sprite import ProceduralSpriteError, render_procedural_sprite
 from app.services.procedural_sprite import (
     render_blueprint as render_blueprint_png,
 )
 from app.services.settings import get_app_settings
 from app.services.sprite_artifact_store import SpriteArtifactStore, SpriteArtifactStoreError
+from app.services.sprite_blueprint import BlueprintGenerationError, generate_sprite_blueprint
 from app.services.sprite_interpretation import SpriteSpecError, create_asset_spec_from_request
 from app.services.sprite_processing import SpriteProcessingError, process_sprite_image
 
@@ -63,15 +60,50 @@ class SpriteService:
         )
         return spec, artifact
 
-    def create_sprite_blueprint(self, artifact_id: str, *, seed: int = 0) -> tuple[SpriteBlueprint, SpriteArtifact]:
+    async def create_sprite_blueprint(
+        self,
+        artifact_id: str,
+        *,
+        strategy: BlueprintStrategy = "auto",
+        seed: int = 0,
+        provider: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+    ) -> tuple[SpriteBlueprint, SpriteArtifact]:
         store = self._store()
         try:
             asset_spec = store.read_asset_spec(artifact_id)
-            blueprint = build_sprite_blueprint(asset_spec, seed=seed)
-            artifact = store.save_blueprint(artifact_id, blueprint)
-        except (ProceduralSpriteError, SpriteArtifactStoreError) as exc:
+            generated = await generate_sprite_blueprint(
+                asset_spec,
+                strategy=strategy,
+                seed=seed,
+                llm_service=self.llm_service,
+                provider=provider,
+                model=model,
+                base_url=base_url,
+            )
+            artifact = store.save_blueprint(
+                artifact_id,
+                generated.blueprint,
+                generation={
+                    "strategy": generated.strategy,
+                    "provider": generated.provider,
+                    "model": generated.model,
+                    "seed": seed,
+                },
+            )
+        except (BlueprintGenerationError, ProceduralSpriteError, SpriteArtifactStoreError) as exc:
             raise SpriteError(str(exc)) from exc
-        return blueprint, artifact
+        logger.info(
+            "sprite blueprint generation completed",
+            extra={
+                "artifact_id": artifact_id,
+                "strategy": generated.strategy,
+                "subject": asset_spec.subject,
+                "primitive_count": len(generated.blueprint.primitives),
+            },
+        )
+        return generated.blueprint, artifact
 
     def process_sprite(self, image_bytes: bytes, asset_spec: AssetSpec) -> tuple[bytes, dict[str, object]]:
         try:
@@ -83,8 +115,19 @@ class SpriteService:
     def render_sprite(self, artifact_id: str, *, seed: int = 0) -> tuple[bytes, dict[str, object]]:
         store = self._store()
         try:
+            artifact = store.load_artifact(artifact_id)
             asset_spec = store.read_asset_spec(artifact_id)
-            result = render_procedural_sprite(asset_spec, seed=seed)
+            if artifact.blueprint_json_path is not None and artifact.blueprint_json_path.exists():
+                blueprint = store.read_blueprint(artifact_id)
+                result = render_blueprint_png(
+                    blueprint,
+                    width=asset_spec.size.width,
+                    height=asset_spec.size.height,
+                    seed=seed,
+                    max_colors=asset_spec.processing_profile.palette_max_colors,
+                )
+            else:
+                result = render_procedural_sprite(asset_spec, seed=seed)
             store.save_render_png(artifact_id, result.png_bytes)
         except (ProceduralSpriteError, SpriteArtifactStoreError) as exc:
             raise SpriteError(str(exc)) from exc
