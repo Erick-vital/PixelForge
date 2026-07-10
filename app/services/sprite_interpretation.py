@@ -12,11 +12,8 @@ from app.schemas.sprite import (
     AllowedView,
     AssetSpec,
     AssetSpecRequest,
-    GenerationPromptResponse,
     PaletteSpec,
-    ProcessingPlanResponse,
     ProcessingProfile,
-    ProcessingStep,
     PromptGuidance,
     ShapeSpec,
     SpriteSize,
@@ -97,59 +94,6 @@ def create_asset_spec_from_prompt(prompt: str) -> AssetSpec:
     )
 
 
-def create_generation_prompt(asset_spec: AssetSpec) -> GenerationPromptResponse:
-    guidance = asset_spec.prompt_guidance
-    constraints = asset_spec.technical_constraints
-    size = f"{asset_spec.size.width}x{asset_spec.size.height}"
-    colors = _palette_words(asset_spec.palette)
-    prompt_parts = [
-        f"{size} pixel art sprite" if guidance.include_size else "pixel art sprite",
-        f"{asset_spec.subject} {asset_spec.asset_type}",
-        f"{asset_spec.game_view} view",
-        asset_spec.style if guidance.include_style else "",
-        asset_spec.shape.silhouette,
-    ]
-    if colors:
-        prompt_parts.append(f"palette: {colors}")
-    if constraints.transparent_background:
-        prompt_parts.append("transparent background")
-    if constraints.readable_at_small_size:
-        prompt_parts.append("readable silhouette")
-    prompt_parts.append("game-ready asset")
-    negative_prompt = (
-        "blurry, realistic, smooth gradients, complex background, oversized details, text, watermark, low readability"
-    )
-    return GenerationPromptResponse(
-        prompt=", ".join(part for part in prompt_parts if part),
-        negative_prompt=negative_prompt if guidance.include_negative_prompt else "",
-    )
-
-
-def create_processing_plan(asset_spec: AssetSpec) -> ProcessingPlanResponse:
-    size = f"{asset_spec.size.width}x{asset_spec.size.height}"
-    profile = asset_spec.processing_profile
-    return ProcessingPlanResponse(
-        steps=[
-            ProcessingStep(name="canvas_setup", instruction=f"Create a {size} transparent canvas."),
-            ProcessingStep(
-                name="sprite_positioning",
-                instruction="Center the sprite within the canvas and keep visual mass balanced.",
-            ),
-            ProcessingStep(
-                name="pixel_art_resize",
-                instruction=f"Use {profile.resize_mode} scaling only; never bicubic or smooth resampling.",
-            ),
-            ProcessingStep(
-                name="palette_limit",
-                instruction=f"Reduce color count to {profile.palette_max_colors} colors while preserving the main palette and shadow readability.",
-            ),
-            ProcessingStep(
-                name="export", instruction=f"Export {profile.export_format.upper()} with transparent background."
-            ),
-        ]
-    )
-
-
 def _detect_size(text: str) -> tuple[int, int]:
     match = re.search(r"\b(32|64|128)\s*x\s*(32|64|128)\b", text)
     if match:
@@ -215,10 +159,6 @@ def _detect_shape(subject: str) -> ShapeSpec:
             proportions={"head": "large", "body": "small", "wings": "small", "tail": "curled"},
         )
     return ShapeSpec(silhouette=f"clear compact {subject} silhouette", proportions={})
-
-
-def _palette_words(palette: PaletteSpec) -> str:
-    return ", ".join([*palette.main, *palette.shadows, *palette.accent])
 
 
 def _normalize(text: str) -> str:

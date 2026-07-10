@@ -10,13 +10,10 @@ from app.schemas.settings import SettingsResponse
 from app.schemas.sprite import (
     AssetSpec,
     AssetSpecRequest,
-    GenerationPromptRequest,
-    GenerationPromptResponse,
-    ProcessingPlanRequest,
-    ProcessingPlanResponse,
     RenderBlueprintRequest,
     RenderSpriteRequest,
-    SpriteBlueprint,
+    SpriteArtifactAssetSpecResponse,
+    SpriteArtifactBlueprintResponse,
     SpriteBlueprintRequest,
 )
 from app.services.settings import (
@@ -35,73 +32,74 @@ def get_sprite_service() -> SpriteService:
     return SpriteService()
 
 
-def _render_response(png: bytes, report: dict[str, object]) -> Response:
-    return Response(
-        content=png,
-        media_type="image/png",
-        headers={
-            "X-PixelForge-Render-Recipe": str(report["recipe"]),
-            "X-PixelForge-Render-Seed": str(report["seed"]),
-            "X-PixelForge-Validation-Size": f"{report['width']}x{report['height']}",
-            "X-PixelForge-Validation-Transparent": str(report["transparent"]).lower(),
-            "X-PixelForge-Validation-Non-Empty": str(report["non_empty"]).lower(),
-            "X-PixelForge-Validation-Colors": str(report["color_count"]),
-        },
+def _render_response(png: bytes, report: dict[str, object], *, artifact_id: str | None = None) -> Response:
+    headers = {
+        "X-PixelForge-Render-Recipe": str(report["recipe"]),
+        "X-PixelForge-Render-Seed": str(report["seed"]),
+        "X-PixelForge-Validation-Size": f"{report['width']}x{report['height']}",
+        "X-PixelForge-Validation-Transparent": str(report["transparent"]).lower(),
+        "X-PixelForge-Validation-Non-Empty": str(report["non_empty"]).lower(),
+        "X-PixelForge-Validation-Colors": str(report["color_count"]),
+    }
+    if artifact_id:
+        headers["X-PixelForge-Artifact-Id"] = artifact_id
+    return Response(content=png, media_type="image/png", headers=headers)
+
+
+@router.post("/asset-spec", response_model=SpriteArtifactAssetSpecResponse)
+async def create_asset_spec(
+    payload: AssetSpecRequest, service: SpriteService = Depends(get_sprite_service)
+) -> SpriteArtifactAssetSpecResponse:
+    try:
+        asset_spec, artifact = await service.create_asset_spec(payload)
+    except SpriteError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return SpriteArtifactAssetSpecResponse(
+        artifact_id=artifact.artifact_id,
+        artifact_dir=str(artifact.artifact_dir),
+        status=artifact.status,
+        subject=artifact.subject,
+        asset_spec=asset_spec,
     )
 
 
-@router.post("/asset-spec", response_model=AssetSpec)
-async def create_asset_spec(
-    payload: AssetSpecRequest, service: SpriteService = Depends(get_sprite_service)
-) -> AssetSpec:
+@router.post("/blueprint", response_model=SpriteArtifactBlueprintResponse)
+def blueprint(
+    payload: SpriteBlueprintRequest, service: SpriteService = Depends(get_sprite_service)
+) -> SpriteArtifactBlueprintResponse:
     try:
-        return await service.create_asset_spec(payload)
-    except SpriteError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-
-@router.post("/generation-prompt", response_model=GenerationPromptResponse)
-def generation_prompt(
-    payload: GenerationPromptRequest, service: SpriteService = Depends(get_sprite_service)
-) -> GenerationPromptResponse:
-    return service.create_generation_prompt(payload.asset_spec)
-
-
-@router.post("/processing-plan", response_model=ProcessingPlanResponse)
-def processing_plan(
-    payload: ProcessingPlanRequest, service: SpriteService = Depends(get_sprite_service)
-) -> ProcessingPlanResponse:
-    return service.create_processing_plan(payload.asset_spec)
-
-
-@router.post("/blueprint", response_model=SpriteBlueprint)
-def blueprint(payload: SpriteBlueprintRequest, service: SpriteService = Depends(get_sprite_service)) -> SpriteBlueprint:
-    try:
-        asset_spec = payload.asset_spec
-        blueprint = service.create_sprite_blueprint(asset_spec, seed=payload.seed)
+        blueprint, artifact = service.create_sprite_blueprint(payload.artifact_id, seed=payload.seed)
+        asset_spec = service.get_asset_spec(payload.artifact_id)
     except SpriteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return blueprint
+    return SpriteArtifactBlueprintResponse(
+        artifact_id=artifact.artifact_id,
+        artifact_dir=str(artifact.artifact_dir),
+        status=artifact.status,
+        subject=artifact.subject,
+        asset_spec=asset_spec,
+        blueprint=blueprint,
+    )
 
 
 @router.post("/render-sprite")
 def render_sprite(payload: RenderSpriteRequest, service: SpriteService = Depends(get_sprite_service)) -> Response:
     try:
-        png, report = service.render_sprite(payload.asset_spec, seed=payload.seed)
+        png, report = service.render_sprite(payload.artifact_id, seed=payload.seed)
     except SpriteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _render_response(png, report)
+    return _render_response(png, report, artifact_id=payload.artifact_id)
 
 
 @router.post("/render-blueprint")
-def render_blueprint(payload: RenderBlueprintRequest, service: SpriteService = Depends(get_sprite_service)) -> Response:
+def render_blueprint(
+    payload: RenderBlueprintRequest, service: SpriteService = Depends(get_sprite_service)
+) -> Response:
     try:
-        png, report = service.render_blueprint(
-            payload.blueprint, width=payload.width, height=payload.height, seed=payload.seed
-        )
+        png, report = service.render_blueprint(payload.artifact_id, seed=payload.seed)
     except SpriteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _render_response(png, report)
+    return _render_response(png, report, artifact_id=payload.artifact_id)
 
 
 @router.post("/process-sprite")

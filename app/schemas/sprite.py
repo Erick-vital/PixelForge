@@ -78,42 +78,34 @@ class AssetSpecRequest(BaseModel):
     base_url: str | None = None
 
 
-class GenerationPromptRequest(BaseModel):
+class SpriteArtifactRef(BaseModel):
+    artifact_id: str
+    artifact_dir: str
+    status: str
+    subject: str
+
+
+class SpriteArtifactAssetSpecResponse(SpriteArtifactRef):
     asset_spec: AssetSpec
 
 
-class GenerationPromptResponse(BaseModel):
-    prompt: str
-    negative_prompt: str
-
-
-class ProcessingPlanRequest(BaseModel):
+class SpriteArtifactBlueprintResponse(SpriteArtifactRef):
     asset_spec: AssetSpec
-
-
-class ProcessingStep(BaseModel):
-    name: str
-    instruction: str
-
-
-class ProcessingPlanResponse(BaseModel):
-    steps: list[ProcessingStep]
+    blueprint: SpriteBlueprint
 
 
 class RenderSpriteRequest(BaseModel):
-    asset_spec: AssetSpec
+    artifact_id: str
     seed: int = 0
 
 
 class SpriteBlueprintRequest(BaseModel):
-    asset_spec: AssetSpec
+    artifact_id: str
     seed: int = 0
 
 
 class RenderBlueprintRequest(BaseModel):
-    blueprint: SpriteBlueprint
-    width: SpriteDimension
-    height: SpriteDimension
+    artifact_id: str
     seed: int = 0
 
 
@@ -146,4 +138,4 @@ class SpriteValidationReport(BaseModel):
 JsonObject = dict[str, Any]
 
 
-RenderBlueprintRequest.model_rebuild()
+SpriteArtifactBlueprintResponse.model_rebuild()

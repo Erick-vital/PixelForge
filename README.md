@@ -6,10 +6,11 @@ The product focus is:
 
 1. Receive a natural-language prompt
 2. Convert it into a canonical Asset Spec
-3. Generate a technical generation prompt and a 2D processing plan
-4. Render a first-pass procedural PNG without image models
-5. Optionally process an input sprite into a transparent PNG
-6. Offer a simple browser front with a text box and button for the main prompt flow
+3. Persist that spec as a sprite artifact item
+4. Build a procedural blueprint from the artifact
+5. Render a first-pass procedural PNG from the artifact
+6. Optionally process an input sprite into a transparent PNG
+7. Offer a simple browser front with a text box and button for the main prompt flow
 
 ## What the repo does now
 
@@ -36,16 +37,16 @@ It has:
 - a button to generate the result
 - inline loading/success/error feedback
 - an HTMX results panel that shows:
+  - the sprite artifact ID
   - Asset Spec JSON
-  - generation prompt JSON
-  - processing plan JSON
+  - Blueprint JSON
 - a procedural PNG render button with inline preview
 
 ## Sprite API
 
 ### `POST /api/asset-spec`
 
-Turns a user prompt into a structured Asset Spec.
+Turns a user prompt into a structured Asset Spec and persists it as a sprite artifact.
 
 Example:
 
@@ -57,17 +58,31 @@ curl -X POST http://127.0.0.1:8025/api/asset-spec \
   }'
 ```
 
-### `POST /api/generation-prompt`
+Response includes:
+- `artifact_id`
+- `artifact_dir`
+- `status`
+- `subject`
+- `asset_spec`
 
-Converts an Asset Spec into a model-ready generation prompt + negative prompt.
+### `POST /api/blueprint`
 
-### `POST /api/processing-plan`
+Builds and stores a procedural blueprint from an existing sprite artifact.
 
-Converts an Asset Spec into a deterministic 2D post-processing plan.
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8025/api/blueprint \
+  -H "Content-Type: application/json" \
+  -d '{
+    "artifact_id": "sprite_20260709_190000_abcd1234",
+    "seed": 123
+  }'
+```
 
 ### `POST /api/render-sprite`
 
-Renders a first-pass procedural PNG directly from an Asset Spec. This path does not call an image model.
+Renders a first-pass procedural PNG directly from an existing sprite artifact. This path does not call an image model.
 
 Example:
 
@@ -75,10 +90,7 @@ Example:
 curl -X POST http://127.0.0.1:8025/api/render-sprite \
   -H "Content-Type: application/json" \
   -d '{
-    "asset_spec": {
-      "subject": "baby dragon",
-      "size": {"width": 64, "height": 64}
-    },
+    "artifact_id": "sprite_20260709_190000_abcd1234",
     "seed": 123
   }' \
   --output baby-dragon.png
@@ -89,6 +101,22 @@ The first render recipes support:
 - `baby dragon`
 - `potion`
 - `sword`
+
+### `POST /api/render-blueprint`
+
+Renders the stored blueprint for a sprite artifact into a PNG.
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8025/api/render-blueprint \
+  -H "Content-Type: application/json" \
+  -d '{
+    "artifact_id": "sprite_20260709_190000_abcd1234",
+    "seed": 123
+  }' \
+  --output blueprint-dragon.png
+```
 
 ### `POST /api/process-sprite`
 
@@ -120,8 +148,9 @@ The canonical Asset Spec currently carries:
 
 Interpretation and processing are now separated in code:
 
-- `app/services/sprite_interpretation.py` handles prompt interpretation and prompt/plan generation
-- `app/services/procedural_sprite.py` handles model-free procedural PNG rendering
+- `app/services/sprite_interpretation.py` handles prompt interpretation
+- `app/services/sprite_artifact_store.py` persists sprite artifact items on disk and in SQLite
+- `app/services/procedural_sprite.py` handles blueprint creation and model-free procedural PNG rendering
 - `app/services/sprite_processing.py` handles image processing with Pillow
 - `app/services/sprite.py` is the orchestration layer used by the API and UI
 

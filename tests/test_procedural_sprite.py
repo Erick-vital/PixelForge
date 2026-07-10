@@ -125,25 +125,25 @@ def test_seed_changes_procedural_render(subject):
     assert len(renders) > 1
 
 
-def test_render_blueprint_endpoint_rejects_unsupported_sizes():
-    spec = _baby_dragon_spec().model_dump(mode="json")
+def test_render_blueprint_endpoint_rejects_unknown_artifact_id():
+    response = TestClient(app).post("/api/render-blueprint", json={"artifact_id": "sprite_missing", "seed": 0})
+    assert response.status_code == 400
+
+
+def test_render_sprite_endpoint_returns_png_from_asset_artifact():
     client = TestClient(app)
-    blueprint = client.post("/api/blueprint", json={"asset_spec": spec, "seed": 0}).json()
+    artifact = client.post(
+        "/api/asset-spec",
+        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64"},
+    ).json()
 
-    response = client.post("/api/render-blueprint", json={"blueprint": blueprint, "width": 50, "height": 64, "seed": 0})
-    assert response.status_code == 422
-
-
-def test_render_sprite_endpoint_returns_png_from_asset_spec():
-    response = TestClient(app).post(
-        "/api/render-sprite",
-        json={"asset_spec": _baby_dragon_spec().model_dump(mode="json"), "seed": 123},
-    )
+    response = client.post("/api/render-sprite", json={"artifact_id": artifact["artifact_id"], "seed": 123})
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     assert response.headers["x-pixelforge-render-recipe"] == "baby_dragon"
     assert response.headers["x-pixelforge-validation-size"] == "64x64"
+    assert response.headers["x-pixelforge-artifact-id"] == artifact["artifact_id"]
     image = Image.open(io.BytesIO(response.content))
     assert image.size == (64, 64)
     assert image.getbbox() is not None
@@ -151,20 +151,25 @@ def test_render_sprite_endpoint_returns_png_from_asset_spec():
 
 def test_blueprint_and_render_blueprint_endpoints_round_trip():
     client = TestClient(app)
-    spec = _baby_dragon_spec().model_dump(mode="json")
+    artifact = client.post(
+        "/api/asset-spec",
+        json={"prompt": "hazme un enemigo dragón bebé para un juego pixel art top-down, 64x64"},
+    ).json()
 
-    blueprint_response = client.post("/api/blueprint", json={"asset_spec": spec, "seed": 55})
+    blueprint_response = client.post("/api/blueprint", json={"artifact_id": artifact["artifact_id"], "seed": 55})
     assert blueprint_response.status_code == 200
     blueprint = blueprint_response.json()
-    assert blueprint["recipe"] == "baby_dragon"
-    assert blueprint["primitives"]
+    assert blueprint["artifact_id"] == artifact["artifact_id"]
+    assert blueprint["blueprint"]["recipe"] == "baby_dragon"
+    assert blueprint["blueprint"]["primitives"]
 
     render_response = client.post(
         "/api/render-blueprint",
-        json={"blueprint": blueprint, "width": 64, "height": 64, "seed": 55},
+        json={"artifact_id": artifact["artifact_id"], "seed": 55},
     )
     assert render_response.status_code == 200
     assert render_response.headers["content-type"] == "image/png"
     assert render_response.headers["x-pixelforge-render-recipe"] == "baby_dragon"
+    assert render_response.headers["x-pixelforge-artifact-id"] == artifact["artifact_id"]
     image = Image.open(io.BytesIO(render_response.content))
     assert image.size == (64, 64)
