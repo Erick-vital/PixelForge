@@ -12,6 +12,7 @@ from app.schemas.sprite import (
     AllowedView,
     AssetSpec,
     AssetSpecRequest,
+    HumanoidSpec,
     PaletteSpec,
     ProcessingProfile,
     PromptGuidance,
@@ -33,6 +34,7 @@ style: pixel art style phrase
 size: {width: 32|64|128, height: 32|64|128}
 palette: {main: string[], shadows: string[], accent: string[]}
 shape: {silhouette: string, proportions: object mapping labels to short string values; use strings such as \"1.0\" for numeric ratios}
+humanoid: null for non-humanoids, otherwise {height: short|average|tall, build: slim|average|broad|heavy, head_size: small|average|large, leg_length: short|average|long}
 technical_constraints: {transparent_background: true, pixel_art: true, readable_at_small_size: true}
 prompt_guidance: {target_prompt_tone: string, include_size: boolean, include_style: boolean, include_negative_prompt: boolean, normalize_subject_to_english: boolean}
 processing_profile: {resize_mode: nearest-neighbor, palette_max_colors: integer, center_sprite: boolean, transparent_background: boolean, export_format: png}
@@ -84,6 +86,7 @@ def create_asset_spec_from_prompt(prompt: str) -> AssetSpec:
         size=SpriteSize(width=width, height=height),
         palette=palette,
         shape=shape,
+        humanoid=_detect_humanoid_traits(normalized, subject),
         technical_constraints=TechnicalConstraints(
             transparent_background=True,
             pixel_art="pixel" in normalized,
@@ -124,6 +127,10 @@ def _detect_subject(text: str) -> str:
         return "potion"
     if "sword" in text or "espada" in text:
         return "sword"
+    if any(
+        word in text for word in ["human", "humano", "persona", "person", "knight", "caballero", "ranger", "blacksmith"]
+    ):
+        return "human"
     return "game asset"
 
 
@@ -149,7 +156,47 @@ def _detect_palette(text: str, subject: str) -> PaletteSpec:
         return PaletteSpec(main=["brown", "gold"], shadows=["dark brown"], accent=["bright gold"])
     if subject == "potion":
         return PaletteSpec(main=["blue", "cyan"], shadows=["dark blue"], accent=["white shine"])
+    colors = {
+        "red": ["red", "rojo", "roja"],
+        "blue": ["blue", "azul"],
+        "green": ["green", "verde"],
+        "brown": ["brown", "marrón", "marron"],
+        "steel": ["steel", "acero"],
+        "white": ["white", "blanco", "blanca"],
+        "black": ["black", "negro", "negra"],
+    }
+    main = [name for name, aliases in colors.items() if any(alias in text for alias in aliases)]
+    accent = ["gold"] if any(word in text for word in ["gold", "dorado", "dorada"]) else []
+    if main or accent:
+        return PaletteSpec(main=main or ["limited readable colors"], shadows=[], accent=accent)
     return PaletteSpec(main=["limited readable colors"], shadows=["dark outline"], accent=["small highlight"])
+
+
+def _detect_humanoid_traits(text: str, subject: str) -> HumanoidSpec | None:
+    if subject != "human":
+        return None
+    return HumanoidSpec(
+        height="short"
+        if any(word in text for word in ["short", "bajito", "baja", "low"])
+        else "tall"
+        if any(word in text for word in ["tall", "alto", "alta"])
+        else "average",
+        build="heavy"
+        if any(word in text for word in ["heavy", "fat", "gordo", "gorda", "robusto", "robusta"])
+        else "slim"
+        if any(word in text for word in ["slim", "thin", "delgado", "delgada"])
+        else "average",
+        head_size="large"
+        if any(word in text for word in ["large head", "big head", "cabeza grande"])
+        else "small"
+        if any(word in text for word in ["small head", "cabeza pequeña", "cabeza pequena"])
+        else "average",
+        leg_length="short"
+        if any(word in text for word in ["short legs", "piernas cortas"])
+        else "long"
+        if any(word in text for word in ["long legs", "piernas largas"])
+        else "average",
+    )
 
 
 def _detect_shape(subject: str) -> ShapeSpec:

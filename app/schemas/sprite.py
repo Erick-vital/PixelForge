@@ -68,6 +68,15 @@ class PromptGuidance(BaseModel):
     normalize_subject_to_english: bool = True
 
 
+class HumanoidSpec(BaseModel):
+    """Stable character proportions that a humanoid recipe can compile safely."""
+
+    height: Literal["short", "average", "tall"] = "average"
+    build: Literal["slim", "average", "broad", "heavy"] = "average"
+    head_size: Literal["small", "average", "large"] = "average"
+    leg_length: Literal["short", "average", "long"] = "average"
+
+
 class ProcessingProfile(BaseModel):
     resize_mode: AllowedResizeMode = "nearest-neighbor"
     palette_max_colors: int = Field(default=24, ge=8, le=32)
@@ -84,6 +93,7 @@ class AssetSpec(BaseModel):
     size: SpriteSize = Field(default_factory=lambda: SpriteSize(width=64, height=64))
     palette: PaletteSpec = Field(default_factory=PaletteSpec)
     shape: ShapeSpec = Field(default_factory=ShapeSpec)
+    humanoid: HumanoidSpec | None = None
     technical_constraints: TechnicalConstraints = Field(default_factory=TechnicalConstraints)
     prompt_guidance: PromptGuidance = Field(default_factory=PromptGuidance)
     processing_profile: ProcessingProfile = Field(default_factory=ProcessingProfile)

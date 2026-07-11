@@ -18,7 +18,7 @@ from app.services.sprite_artifact_store import SpriteArtifactStore, SpriteArtifa
 from app.services.sprite_blueprint import BlueprintGenerationError, generate_sprite_blueprint
 from app.services.sprite_interpretation import SpriteSpecError, create_asset_spec_from_request
 from app.services.sprite_processing import SpriteProcessingError, process_sprite_image
-from app.services.sprite_quality import SpriteQualityError, require_sprite_quality
+from app.sprite_engine.quality.structural import SpriteQualityError, require_sprite_quality
 
 logger = logging.getLogger(__name__)
 

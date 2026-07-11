@@ -14,7 +14,7 @@ from app.schemas.sprite import AssetSpec, BlueprintStrategy, SpriteBlueprint, Sp
 from app.services.llm_generation import LlmGenerationProviderError, LlmGenerationService
 from app.services.procedural_sprite import build_sprite_blueprint, known_procedural_recipe, render_blueprint
 from app.services.settings import MissingLlmApiKeyError
-from app.services.sprite_quality import require_sprite_quality
+from app.sprite_engine.quality.structural import require_sprite_quality
 
 logger = logging.getLogger(__name__)
 
@@ -166,12 +166,17 @@ def _resolve_strategy(asset_spec: AssetSpec, strategy: BlueprintStrategy) -> Lit
     if strategy == "llm_blueprint":
         return "llm_blueprint"
     if strategy == "auto":
-        return "procedural" if _has_known_procedural_recipe(asset_spec.subject) else "llm_blueprint"
+        recipe = known_procedural_recipe(asset_spec.subject)
+        if recipe is not None and _procedural_recipe_supports_spec(recipe, asset_spec):
+            return "procedural"
+        return "llm_blueprint"
     raise BlueprintGenerationError(f"Unsupported blueprint strategy: {strategy}")
 
 
-def _has_known_procedural_recipe(subject: str) -> bool:
-    return known_procedural_recipe(subject) is not None
+def _procedural_recipe_supports_spec(recipe: str, asset_spec: AssetSpec) -> bool:
+    # The local humanoid compiler only has a symmetric front-facing skeleton.
+    # Auto must not claim success for a side-view prompt it cannot represent.
+    return recipe != "humanoid_chibi" or asset_spec.game_view == "icon/front"
 
 
 def _blueprint_prompt(asset_spec: AssetSpec, *, seed: int) -> str:

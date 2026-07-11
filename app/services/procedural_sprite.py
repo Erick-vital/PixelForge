@@ -9,7 +9,8 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from app.schemas.sprite import AssetSpec, SpriteBlueprint, SpriteOutlineSpec, SpritePrimitive
-from app.services.humanoid_sprite import compile_humanoid_base
+from app.sprite_engine.character.skeleton import HumanoidTraits, build_humanoid_skeleton
+from app.sprite_engine.recipes.humanoid import compile_humanoid_base
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,14 @@ def build_sprite_blueprint(asset_spec: AssetSpec, *, seed: int = 0) -> SpriteBlu
     if recipe == "sword":
         return _blueprint_for_sword(asset_spec.subject, palette, rng)
     if recipe == "humanoid_chibi":
-        return compile_humanoid_base(asset_spec.subject, palette)
+        humanoid_spec = asset_spec.humanoid
+        traits = HumanoidTraits(
+            height=humanoid_spec.height if humanoid_spec else "average",
+            build=humanoid_spec.build if humanoid_spec else "average",
+            head_size=humanoid_spec.head_size if humanoid_spec else "average",
+            leg_length=humanoid_spec.leg_length if humanoid_spec else "average",
+        )
+        return compile_humanoid_base(asset_spec.subject, palette, skeleton=build_humanoid_skeleton(traits))
     return _blueprint_for_generic_prop(asset_spec.subject, palette, rng)
 
 
@@ -300,12 +308,55 @@ def _palette_for(asset_spec: AssetSpec) -> dict[str, str]:
             "highlight": "#ffffff",
             "accent": "#d8a43d",
         }
+    if any(token in subject for token in ("human", "humanoid", "person", "chibi")):
+        return _humanoid_palette(asset_spec)
     return {
         "outline": "#202020",
         "base": "#7a9b4f",
         "shadow": "#3d552c",
         "highlight": "#b5d178",
         "accent": "#fff18f",
+    }
+
+
+def _humanoid_palette(asset_spec: AssetSpec) -> dict[str, str]:
+    colors = {
+        "red": "#b83a3a",
+        "dark red": "#6f2028",
+        "blue": "#3568b8",
+        "dark blue": "#233b72",
+        "green": "#4f8a4c",
+        "dark green": "#2f592d",
+        "brown": "#87552f",
+        "dark brown": "#4d2d20",
+        "steel": "#9aa6b2",
+        "gray": "#6d7378",
+        "grey": "#6d7378",
+        "gold": "#d8a43d",
+        "yellow": "#d8a43d",
+        "white": "#e9edf2",
+        "black": "#202020",
+    }
+
+    def resolve(candidates: list[str], fallback: str) -> str:
+        for candidate in candidates:
+            normalized = candidate.lower().strip()
+            if (
+                len(normalized) == 7
+                and normalized.startswith("#")
+                and all(char in "0123456789abcdef" for char in normalized[1:])
+            ):
+                return normalized
+            if normalized in colors:
+                return colors[normalized]
+        return fallback
+
+    return {
+        "outline": "#202020",
+        "base": resolve(asset_spec.palette.main, "#7a9b4f"),
+        "shadow": resolve(asset_spec.palette.shadows, "#3d552c"),
+        "highlight": "#d9e8a8",
+        "accent": resolve(asset_spec.palette.accent, "#fff18f"),
     }
 
 
