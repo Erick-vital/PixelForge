@@ -15,7 +15,8 @@ The product focus is:
 ## What the repo does now
 
 - FastAPI JSON API
-- Canonical Sprite Asset Spec with structured guidance sections
+- Canonical Sprite Asset Spec with structured `CharacterSpec` for humanoid anatomy, pose, face, hair, clothing, equipment, materials, and lighting
+- Procedural humanoid composition with semantic layers and inspectable alpha masks
 - Separate interpretation and processing services
 - Procedural sprite rendering in Python with Pillow + NumPy
 - 2D sprite post-processing with Pillow
@@ -144,7 +145,7 @@ curl -X POST http://127.0.0.1:8025/api/process-sprite \
 
 ## Sprite contract and pipeline
 
-The canonical Asset Spec currently carries:
+The canonical `AssetSpec` carries:
 
 - `asset_type`
 - `subject`
@@ -153,19 +154,21 @@ The canonical Asset Spec currently carries:
 - `size`
 - `palette`
 - `shape`
+- `character` (when the asset is humanoid)
 - `technical_constraints`
 - `prompt_guidance`
 - `processing_profile`
 
-Interpretation and processing are now separated in code:
-
 - `app/services/sprite_interpretation.py` handles prompt interpretation
 - `app/services/sprite_artifact_store.py` persists sprite artifact items on disk and in SQLite
-- `app/services/procedural_sprite.py` handles known local blueprint recipes and model-free procedural PNG rendering
-- `app/services/sprite_blueprint.py` selects the strategy, generates LLM blueprint JSON, and validates it before rendering
-- `app/services/sprite_quality.py` validates rendered alpha connectivity, canvas occupancy, and isolated pixels before a render is persisted
-- `app/models/humanoid.py` and `app/services/humanoid_sprite.py` define and compile the first procedural humanoid chibi base
+- `app/services/sprite_blueprint.py` selects strategy, generates LLM blueprint JSON, and validates it
 - `app/services/sprite_processing.py` handles image processing with Pillow
+- `app/sprite_engine/character/spec.py` defines the compositional `CharacterSpec`
+- `app/sprite_engine/character/skeleton.py` resolves bounded anatomy into anchors
+- `app/sprite_engine/recipes/humanoid.py` compiles semantic character parts into ordered layers
+- `app/sprite_engine/rendering/rasterizer.py` exposes alpha masks per semantic layer
+- `app/sprite_engine/quality/structural.py` validates rendered alpha connectivity, canvas occupancy, and isolated pixels
+- `app/services/procedural_sprite.py` retains legacy prop/dragon/potion/sword recipes and the generic rasterizer during migration
 - `app/services/sprite.py` is the orchestration layer used by the API and UI
 
 For the current end-to-end architecture, see [docs/architecture.md](docs/architecture.md).
@@ -220,7 +223,7 @@ See `.env.example`. Important variables:
 
 ## Notes
 
-- The MVP supports `enemy`, `prop`, and `icon` assets.
+- The current scope supports `enemy`, `prop`, and `icon` assets.
 - Supported sizes: `32x32`, `64x64`, `128x128`.
 - Supported views: `side-view`, `top-down 3/4`, `icon/front`.
 - Output is PNG with transparency.

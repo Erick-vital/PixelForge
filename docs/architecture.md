@@ -23,7 +23,7 @@ El renderer no contiene conocimiento de subjects específicos. Los subjects y su
 | Contratos | `app/schemas/` | Modelos Pydantic públicos: Asset Spec, requests, Sprite Blueprint y primitives. |
 | Modelos internos | `app/models/` | Dataclasses y DTOs internos que cruzan límites de aplicación, por ejemplo artefactos y reportes. |
 | Motor de sprites | `app/sprite_engine/` | Dominio aislado: character skeletons, recipes, composición futura, rendering y calidad. |
-| Servicios | `app/services/` | Orquestación, interpretación, persistencia, LLM, configuración y adaptadores de compatibilidad. |
+| Servicios | `app/services/` | Orquestación, interpretación, persistencia, LLM, configuración y adaptadores de aplicación. |
 | UI | `app/templates/`, `app/static/` | Páginas Jinja2, fragments HTMX y estilos. |
 | Pruebas | `tests/` | Pruebas herméticas de servicios, renderer, API y UI. |
 
@@ -31,16 +31,20 @@ El renderer no contiene conocimiento de subjects específicos. Los subjects y su
 
 ### Límite `sprite_engine`
 
-La reestructuración inicial introduce `app/sprite_engine/` sin cambiar el contrato HTTP, `AssetSpec`, blueprint ni artefactos persistidos:
+La reestructuración introduce `app/sprite_engine/` como límite del dominio de sprites. El `AssetSpec` público y los artefactos existentes conservan su flujo; el contrato interno humanoide cambió de `humanoid` a `character`.
 
 ```text
 sprite_engine/
+  character/spec.py           # CharacterSpec composicional
   character/skeleton.py       # Traits, anchors e invariantes geométricas
-  recipes/humanoid.py         # Compilación humanoide -> primitives genéricas
+  recipes/humanoid.py         # Compilación humanoide -> primitives por capa
+  rendering/rasterizer.py     # Máscaras alpha semánticas por capa
   quality/structural.py       # Conectividad, occupancy y píxeles aislados
 ```
 
-`app/models/humanoid.py`, `app/services/humanoid_sprite.py` y `app/services/sprite_quality.py` permanecen como facades de compatibilidad. El código nuevo debe importar desde `sprite_engine`; los facades existen para no romper imports existentes durante la migración. Las próximas capacidades (`composition/`, `rendering/`, `search/`) se agregarán sólo cuando tengan una responsabilidad implementada, no como carpetas vacías.
+`app/models/humanoid.py`, `app/services/humanoid_sprite.py` y `app/services/sprite_quality.py` fueron eliminados tras la migración; los imports internos y las pruebas usan directamente `sprite_engine`. Esto rompe deliberadamente esas rutas Python antiguas para impedir que el dominio vuelva a dispersarse.
+
+El primer incremento composicional agrega `character/spec.py`, `recipes/humanoid.py` y `rendering/rasterizer.py`: `CharacterSpec` expresa anatomy, pose, face, hair, clothing, equipment, materials y lighting; la receta emite primitives etiquetadas por capa y el rasterizador puede inspeccionar máscaras alpha por capa.
 
 ## Pipeline de sprites
 
@@ -102,7 +106,7 @@ El default es `enabled=false` para preservar el aspecto de blueprints histórico
 
 ### 4. Renderer y outline pass
 
-`app/services/procedural_sprite.py` contiene temporalmente el rasterizador genérico y las recipes legacy de prop/dragon/potion/sword. El dominio humanoide ya vive en `app/sprite_engine/recipes/humanoid.py`; el siguiente paso de rendering se migrará cuando se extraiga sin mezclarlo con la composición de personajes.
+`app/services/procedural_sprite.py` contiene temporalmente el rasterizador genérico y las recipes legacy de prop/dragon/potion/sword. El dominio humanoide vive en `app/sprite_engine/recipes/humanoid.py`; `app/sprite_engine/rendering/rasterizer.py` expone las máscaras alpha por capa para inspección y composición. El renderer principal todavía rasteriza primitives en orden, por lo que la composición RGBA completa por máscara queda como siguiente incremento.
 
 1. crear canvas RGBA transparente;
 2. escalar y rasterizar primitives de atrás hacia adelante;
@@ -121,20 +125,16 @@ El outline es el borde externo de la silueta. No sustituye detalles internos com
 | `dragon` | `baby_dragon` | `procedural_sprite.py` |
 | `potion` | `potion` | `procedural_sprite.py` |
 | `sword` | `sword` | `procedural_sprite.py` |
-| `human`, `humanoid`, `person`, `chibi` | `humanoid_chibi` | `humanoid_sprite.py` |
+| `human`, `humanoid`, `person`, `chibi` | `humanoid_character` | `app/sprite_engine/recipes/humanoid.py` |
 | cualquier otro (sólo estrategia procedural) | `generic_prop` | `procedural_sprite.py` |
 
 ### Humanoide chibi parametrizable
 
-`HumanoidSkeleton` (`app/sprite_engine/character/skeleton.py`) contiene anchors e invariantes del cuerpo base: eje `x=32`, ground line, alto de cabeza, torso, brazos, cadera y piernas. `compile_humanoid_base()` (`app/sprite_engine/recipes/humanoid.py`) convierte ese modelo en un blueprint frontal de cabeza, torso, brazos y piernas simétricas. No agrega equipo, animación ni overlays.
+`HumanoidSkeleton` (`app/sprite_engine/character/skeleton.py`) contiene anchors e invariantes del cuerpo base. `CharacterSpec` (`app/sprite_engine/character/spec.py`) agrupa `anatomy`, `pose`, `face`, `hair`, `clothing`, `equipment`, `materials` y `lighting`. La receta `compile_humanoid_character()` convierte ambos en primitives etiquetadas con capas semánticas: `back_equipment`, `pants`, `boots`, `torso`, `arms`, `head`, `hair`, `front_equipment`, `shadows` y `highlights`.
 
-La receta ya no usa siempre el mismo skeleton. Un `AssetSpec.humanoid` opcional declara rasgos tipados y acotados (`height`, `build`, `head_size`, `leg_length`). `HumanoidTraits` conserva esa intención semántica y `build_humanoid_skeleton()` la resuelve a coordenadas seguras de 64px antes de compilar primitives. La receta mantiene como invariantes el orden de anchors, conexión de extremidades, simetría frontal, canvas bounds y línea de suelo; sólo varían proporciones permitidas. Ante una combinación incompatible (por ejemplo, cuerpo bajo, cabeza grande y piernas muy largas), limita la longitud de piernas para conservar un torso conectado. El `seed` no altera esos rasgos solicitados.
+`AssetSpec.character` reemplaza al contrato anterior `AssetSpec.humanoid`. La anatomía continúa usando valores acotados (`height`, `build`, `head_size`, `leg_length`) y se resuelve a coordenadas seguras de 64px. La receta mantiene orden de anchors, conexión de extremidades, simetría frontal, canvas bounds y línea de suelo. Ante combinaciones incompatibles, limita la dimensión menos crítica para conservar el torso conectado.
 
-La implementación local de humanoides es sólo frontal y simétrica. Por ello, con `strategy=auto`, un Asset Spec humanoide `side-view` se dirige a `llm_blueprint`: no se debe reportar como éxito procedural un chibi frontal que contradice el view solicitado. La estrategia `procedural` explícita sigue reservada para sprites frontales.
-
-Para requests sin LLM, `sprite_interpretation.py` detecta términos como `bajito`, `alto`, `gordo`, `delgado`, `cabeza grande` y `piernas largas`. Para requests con LLM, el contrato de Asset Spec solicita el objeto `humanoid` explícitamente. La paleta humanoide además conserva roles semánticos solicitados (`main`, `shadows`, `accent`) cuando conoce el color.
-
-Esta separación protege el límite arquitectónico: el compilador conoce el dominio humanoide; `render_blueprint()` no.
+La implementación procedural local sigue soportando sólo la pose frontal simétrica. Con `strategy=auto`, un humanoide `side-view` se dirige a `llm_blueprint`; no se reporta como éxito procedural un chibi frontal que contradiga la vista solicitada. Las capas alpha pueden inspeccionarse con `render_layer_masks()`.
 
 ## Calidad raster
 

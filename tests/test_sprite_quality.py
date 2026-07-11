@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PIL import Image
 
-from app.services.sprite_quality import evaluate_sprite_quality
+from app.sprite_engine.quality.structural import evaluate_sprite_quality
 
 
 def _image_with_pixels(size: int, pixels: set[tuple[int, int]]) -> Image.Image:

@@ -10,7 +10,8 @@ from PIL import Image, ImageDraw
 
 from app.schemas.sprite import AssetSpec, SpriteBlueprint, SpriteOutlineSpec, SpritePrimitive
 from app.sprite_engine.character.skeleton import HumanoidTraits, build_humanoid_skeleton
-from app.sprite_engine.recipes.humanoid import compile_humanoid_base
+from app.sprite_engine.character.spec import CharacterSpec
+from app.sprite_engine.recipes.humanoid import compile_humanoid_character
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +62,20 @@ def build_sprite_blueprint(asset_spec: AssetSpec, *, seed: int = 0) -> SpriteBlu
     if recipe == "sword":
         return _blueprint_for_sword(asset_spec.subject, palette, rng)
     if recipe == "humanoid_chibi":
-        humanoid_spec = asset_spec.humanoid
+        character = asset_spec.character or CharacterSpec()
+        anatomy = character.anatomy
         traits = HumanoidTraits(
-            height=humanoid_spec.height if humanoid_spec else "average",
-            build=humanoid_spec.build if humanoid_spec else "average",
-            head_size=humanoid_spec.head_size if humanoid_spec else "average",
-            leg_length=humanoid_spec.leg_length if humanoid_spec else "average",
+            height=anatomy.height,
+            build=anatomy.build,
+            head_size=anatomy.head_size,
+            leg_length=anatomy.leg_length,
         )
-        return compile_humanoid_base(asset_spec.subject, palette, skeleton=build_humanoid_skeleton(traits))
+        return compile_humanoid_character(
+            asset_spec.subject,
+            palette,
+            character=character,
+            skeleton=build_humanoid_skeleton(traits),
+        )
     return _blueprint_for_generic_prop(asset_spec.subject, palette, rng)
 
 
@@ -351,12 +358,25 @@ def _humanoid_palette(asset_spec: AssetSpec) -> dict[str, str]:
                 return colors[normalized]
         return fallback
 
+    base = resolve(asset_spec.palette.main, "#7a9b4f")
+    shadow = resolve(asset_spec.palette.shadows, "#3d552c")
+    character = asset_spec.character
+    hair = character.hair.color if character and character.hair.color else "#4d2d20"
     return {
         "outline": "#202020",
-        "base": resolve(asset_spec.palette.main, "#7a9b4f"),
-        "shadow": resolve(asset_spec.palette.shadows, "#3d552c"),
+        "base": base,
+        "shadow": shadow,
         "highlight": "#d9e8a8",
         "accent": resolve(asset_spec.palette.accent, "#fff18f"),
+        "skin": "#d49a6a",
+        "hair": hair,
+        "shirt": base,
+        "apron": "#87552f",
+        "sleeve": base,
+        "pants": shadow,
+        "boots": "#2f241f",
+        "equipment_wood": "#6b4226",
+        "equipment_metal": "#9aa6b2",
     }
 
 
