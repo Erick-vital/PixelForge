@@ -1,7 +1,18 @@
 <div class="card results">
   <h2>Sprite result</h2>
   <p class="path-note">Prompt: <code>{{ prompt }}</code></p>
-  <p class="path-note">Estrategia solicitada: <code>{{ blueprint_strategy }}</code></p>
+  <p class="path-note">Requested view: <code>{{ decision_trace.requested_view or 'auto/default' }}</code></p>
+  <p class="path-note">Resolved view: <code>{{ asset_spec.game_view }}</code></p>
+  <p class="path-note">View source: <code>{{ decision_trace.view_source }}</code></p>
+  <p class="path-note">Template: <code>{{ decision_trace.template_id or 'none' }}</code></p>
+  <p class="path-note">Requested strategy: <code>{{ generation.requested_strategy }}</code></p>
+  <p class="path-note">Resolved strategy: <code>{{ generation.resolved_strategy }}</code></p>
+  <p class="path-note">Grammar/IA: <code>{{ generation.grammar or 'blueprint IA' }}</code></p>
+  <p class="path-note">Semantic report: <code>{{ generation.semantic_quality | tojson }}</code></p>
+  <p class="path-note">Family: <code>{{ asset_spec_json.family }}</code></p>
+  <p class="path-note">Archetype: <code>{{ asset_spec_json.archetype }}</code></p>
+  <p class="path-note">Grammar: <code>{{ generation.grammar or 'blueprint IA' }}</code></p>
+  <p class="path-note">Reason: <code>{{ generation.fallback_reason or 'capability match' }}</code></p>
   <p class="path-note">Receta generada: <code>{{ blueprint.recipe }}</code></p>
   <p class="path-note">Artifact ID: <code>{{ artifact_id }}</code></p>
   <p class="path-note">Artifact dir: <code>{{ artifact_dir }}</code></p>

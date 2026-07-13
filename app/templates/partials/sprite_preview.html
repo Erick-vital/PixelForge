@@ -2,6 +2,8 @@
   <h3>Procedural PNG preview</h3>
   <img class="sprite-preview-image" src="{{ png_data_uri }}" alt="Procedurally rendered sprite preview" />
   <dl class="metadata-grid">
+    <div><dt>strategy</dt><dd>{{ report.blueprint_generation.resolved_strategy or 'historical render' }}</dd></div>
+    <div><dt>grammar</dt><dd>{{ report.blueprint_generation.grammar or 'blueprint IA / histórico' }}</dd></div>
     <div><dt>recipe</dt><dd>{{ report.recipe }}</dd></div>
     <div><dt>seed</dt><dd>{{ report.seed }}</dd></div>
     <div><dt>size</dt><dd>{{ report.width }}x{{ report.height }}</dd></div>

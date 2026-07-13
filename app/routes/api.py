@@ -17,6 +17,7 @@ from app.schemas.sprite import (
     SpriteBlueprintRequest,
 )
 from app.services.settings import (
+    MissingLlmApiKeyError,
     env_file_path,
     get_app_settings,
     get_llm_base_url,
@@ -61,7 +62,9 @@ async def create_asset_spec(
     payload: AssetSpecRequest, service: SpriteService = Depends(get_sprite_service)
 ) -> SpriteArtifactAssetSpecResponse:
     try:
-        asset_spec, artifact = await service.create_asset_spec(payload)
+        asset_spec, artifact, decision_trace = await service.create_asset_spec(payload)
+    except MissingLlmApiKeyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except SpriteError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return SpriteArtifactAssetSpecResponse(
@@ -70,6 +73,7 @@ async def create_asset_spec(
         status=artifact.status,
         subject=artifact.subject,
         asset_spec=asset_spec,
+        decision_trace=decision_trace,
     )
 
 

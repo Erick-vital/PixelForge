@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 
 from app.models.sprite_artifact import SpriteArtifact
-from app.schemas.sprite import AssetSpec, AssetSpecRequest, BlueprintStrategy, SpriteBlueprint
+from app.schemas.sprite import AssetSpec, AssetSpecDecisionTrace, AssetSpecRequest, BlueprintStrategy, SpriteBlueprint
 from app.services.llm_generation import LlmGenerationService
 from app.services.procedural_sprite import ProceduralSpriteError, render_procedural_sprite
 from app.services.procedural_sprite import (
@@ -16,7 +16,7 @@ from app.services.procedural_sprite import (
 from app.services.settings import get_app_settings
 from app.services.sprite_artifact_store import SpriteArtifactStore, SpriteArtifactStoreError
 from app.services.sprite_blueprint import BlueprintGenerationError, generate_sprite_blueprint
-from app.services.sprite_interpretation import SpriteSpecError, create_asset_spec_from_request
+from app.services.sprite_interpretation import SpriteSpecError, create_asset_spec_from_request_with_trace
 from app.services.sprite_processing import SpriteProcessingError, process_sprite_image
 from app.sprite_engine.quality.structural import SpriteQualityError, require_sprite_quality
 
@@ -42,14 +42,20 @@ class SpriteService:
             raise SpriteError("Sprite artifact store is not configured")
         return self.artifact_store
 
-    async def create_asset_spec(self, request: AssetSpecRequest) -> tuple[AssetSpec, SpriteArtifact]:
+    async def create_asset_spec(
+        self, request: AssetSpecRequest
+    ) -> tuple[AssetSpec, SpriteArtifact, AssetSpecDecisionTrace]:
         logger.info(
             "sprite asset spec generation started",
             extra={"prompt_chars": len(request.prompt), "use_llm": request.use_llm},
         )
         try:
-            spec = await create_asset_spec_from_request(request, llm_service=self.llm_service)
-            artifact = self._store().create_asset_spec_artifact(prompt=request.prompt, asset_spec=spec)
+            spec, decision_trace = await create_asset_spec_from_request_with_trace(
+                request, llm_service=self.llm_service
+            )
+            artifact = self._store().create_asset_spec_artifact(
+                prompt=request.prompt, asset_spec=spec, decision_trace=decision_trace
+            )
         except SpriteSpecError as exc:
             raise SpriteError(str(exc)) from exc
         logger.info(
@@ -62,7 +68,7 @@ class SpriteService:
                 "height": spec.size.height,
             },
         )
-        return spec, artifact
+        return spec, artifact, decision_trace
 
     async def create_sprite_blueprint(
         self,
@@ -90,13 +96,25 @@ class SpriteService:
                 artifact_id,
                 generated.blueprint,
                 generation={
+                    "requested_strategy": strategy,
+                    "resolved_strategy": generated.strategy,
                     "strategy": generated.strategy,
                     "provider": generated.provider,
                     "model": generated.model,
+                    "grammar": generated.grammar,
+                    "grammar_version": 1 if generated.grammar else None,
+                    "family": asset_spec.family,
+                    "archetype": asset_spec.archetype,
+                    "skeleton": generated.skeleton,
+                    "fallback_reason": generated.fallback_reason,
                     "seed": seed,
+                    "semantic_quality": generated.semantic_quality.as_dict() if generated.semantic_quality else None,
                 },
             )
-        except (BlueprintGenerationError, ProceduralSpriteError, SpriteArtifactStoreError) as exc:
+        except BlueprintGenerationError as exc:
+            store.mark_blueprint_failed(artifact_id, generation_error=_safe_generation_error(exc))
+            raise SpriteError(str(exc)) from exc
+        except (ProceduralSpriteError, SpriteArtifactStoreError) as exc:
             raise SpriteError(str(exc)) from exc
         logger.info(
             "sprite blueprint generation completed",
@@ -134,6 +152,7 @@ class SpriteService:
                 result = render_procedural_sprite(asset_spec, seed=seed)
             quality = require_sprite_quality(Image.open(BytesIO(result.png_bytes)))
             result.report["quality"] = quality.as_dict()
+            result.report["blueprint_generation"] = store.read_metadata(artifact_id).get("blueprint_generation", {})
             store.save_render_png(artifact_id, result.png_bytes)
         except (ProceduralSpriteError, SpriteArtifactStoreError, SpriteQualityError) as exc:
             raise SpriteError(str(exc)) from exc
@@ -154,6 +173,7 @@ class SpriteService:
             )
             quality = require_sprite_quality(Image.open(BytesIO(result.png_bytes)))
             result.report["quality"] = quality.as_dict()
+            result.report["blueprint_generation"] = store.read_metadata(artifact_id).get("blueprint_generation", {})
             store.save_render_png(artifact_id, result.png_bytes)
         except (ProceduralSpriteError, SpriteArtifactStoreError, SpriteQualityError) as exc:
             raise SpriteError(str(exc)) from exc
@@ -168,6 +188,25 @@ class SpriteService:
             return self._store().read_asset_spec(artifact_id)
         except SpriteArtifactStoreError as exc:
             raise SpriteError(str(exc)) from exc
+
+    def get_blueprint_generation(self, artifact_id: str) -> dict[str, object]:
+        try:
+            metadata = self._store().read_metadata(artifact_id)
+            generation = metadata.get("blueprint_generation", {})
+            return generation if isinstance(generation, dict) else {}
+        except SpriteArtifactStoreError as exc:
+            raise SpriteError(str(exc)) from exc
+
+
+def _safe_generation_error(error: BlueprintGenerationError) -> dict[str, object]:
+    known_codes = (
+        "side_view_symmetry_too_high",
+        "side_view_missing_directional_feature",
+        "side_view_missing_limb_depth",
+        "front_view_symmetry_too_low",
+    )
+    codes = [code for code in known_codes if code in str(error)]
+    return {"issue_codes": codes or ["blueprint_generation_failed"]}
 
 
 __all__ = [

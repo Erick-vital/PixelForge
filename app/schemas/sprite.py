@@ -3,8 +3,9 @@ from __future__ import annotations
 import math
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, Field, StringConstraints, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
+from app.sprite_engine.character.quadruped_spec import QuadrupedSpec
 from app.sprite_engine.character.spec import CharacterSpec
 
 AllowedAssetType = Literal["enemy", "prop", "icon"]
@@ -12,6 +13,9 @@ AllowedView = Literal["side-view", "top-down 3/4", "icon/front"]
 AllowedResizeMode = Literal["nearest-neighbor"]
 AllowedExportFormat = Literal["png"]
 BlueprintStrategy = Literal["auto", "procedural", "llm_blueprint"]
+AssetFamily = Literal["humanoid", "quadruped", "dragon", "prop", "unknown"]
+GenerationMode = Literal["auto", "controlled", "exploratory"]
+ViewSource = Literal["explicit", "template", "default", "llm_inferred"]
 
 
 def _supported_sprite_dimension(value: int) -> int:
@@ -79,6 +83,10 @@ class ProcessingProfile(BaseModel):
 
 
 class AssetSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    generation_mode: GenerationMode = "auto"
+    family: AssetFamily = "unknown"
+    archetype: str = "generic"
     asset_type: AllowedAssetType = "prop"
     subject: str = "game asset"
     game_view: AllowedView = "icon/front"
@@ -87,17 +95,44 @@ class AssetSpec(BaseModel):
     palette: PaletteSpec = Field(default_factory=PaletteSpec)
     shape: ShapeSpec = Field(default_factory=ShapeSpec)
     character: CharacterSpec | None = None
+    quadruped: QuadrupedSpec | None = None
     technical_constraints: TechnicalConstraints = Field(default_factory=TechnicalConstraints)
     prompt_guidance: PromptGuidance = Field(default_factory=PromptGuidance)
     processing_profile: ProcessingProfile = Field(default_factory=ProcessingProfile)
+
+    @model_validator(mode="after")
+    def reconcile_view_and_pose(self) -> AssetSpec:
+        if self.character is None or self.game_view not in {"side-view", "icon/front"}:
+            return self
+
+        expected_stance = "side_neutral" if self.game_view == "side-view" else "front_neutral"
+        pose_was_supplied = "pose" in self.character.model_fields_set
+        stance_was_supplied = pose_was_supplied and "stance" in self.character.pose.model_fields_set
+        if self.character.pose.stance == expected_stance:
+            return self
+        if "game_view" in self.model_fields_set and stance_was_supplied:
+            raise ValueError("pose contradicts game_view")
+        if not stance_was_supplied:
+            self.character.pose.stance = expected_stance
+        return self
 
 
 class AssetSpecRequest(BaseModel):
     prompt: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     use_llm: bool = True
+    view: AllowedView | None = None
+    generation_mode: GenerationMode = "exploratory"
+    blueprint_strategy: BlueprintStrategy = "auto"
+    template_id: str | None = None
     provider: str | None = None
     model: str | None = None
     base_url: str | None = None
+
+
+class AssetSpecDecisionTrace(BaseModel):
+    view_source: ViewSource
+    template_id: str | None = None
+    requested_view: AllowedView | None = None
 
 
 class SpriteArtifactRef(BaseModel):
@@ -109,6 +144,7 @@ class SpriteArtifactRef(BaseModel):
 
 class SpriteArtifactAssetSpecResponse(SpriteArtifactRef):
     asset_spec: AssetSpec
+    decision_trace: AssetSpecDecisionTrace
 
 
 class SpriteArtifactBlueprintResponse(SpriteArtifactRef):
@@ -164,6 +200,7 @@ DEFAULT_LAYER_ORDER: tuple[SpriteLayer, ...] = (
 
 
 class SpritePrimitive(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     op: Literal["ellipse", "rectangle", "polygon", "line", "point"]
     fill: str
     layer: SpriteLayer = "base"
@@ -180,11 +217,16 @@ class SpriteOutlineSpec(BaseModel):
 
 
 class SpriteBlueprint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     recipe: str
     subject: str
     palette: dict[str, str]
     primitives: list[SpritePrimitive]
     layer_order: list[SpriteLayer] = Field(default_factory=lambda: list(DEFAULT_LAYER_ORDER))
+    material_roles: dict[str, Literal["cloth", "leather", "metal", "wood", "skin", "hair"]] = Field(
+        default_factory=dict
+    )
+    lighting_direction: Literal["top_left", "top_right"] = "top_left"
     outline: SpriteOutlineSpec = Field(default_factory=SpriteOutlineSpec)
     notes: list[str] = Field(default_factory=list)
 

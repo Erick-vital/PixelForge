@@ -6,9 +6,12 @@ import sqlite3
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+
+from pydantic import ValidationError
 
 from app.models.sprite_artifact import SpriteArtifact
-from app.schemas.sprite import AssetSpec, SpriteBlueprint
+from app.schemas.sprite import AssetSpec, AssetSpecDecisionTrace, SpriteBlueprint
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +49,9 @@ class SpriteArtifactStore:
             )
             conn.commit()
 
-    def create_asset_spec_artifact(self, *, prompt: str, asset_spec: AssetSpec) -> SpriteArtifact:
+    def create_asset_spec_artifact(
+        self, *, prompt: str, asset_spec: AssetSpec, decision_trace: AssetSpecDecisionTrace | None = None
+    ) -> SpriteArtifact:
         self.init_db()
         artifact_id = _new_id("sprite")
         artifact_dir = self.sprite_items_dir / artifact_id
@@ -57,7 +62,7 @@ class SpriteArtifactStore:
 
         _write_json(asset_spec_json_path, asset_spec.model_dump(mode="json"))
         created_at = _iso_now()
-        metadata = {
+        metadata: dict[str, Any] = {
             "artifact_id": artifact_id,
             "created_at": created_at,
             "updated_at": created_at,
@@ -69,6 +74,8 @@ class SpriteArtifactStore:
             "blueprint_json_path": str(blueprint_json_path),
             "render_png_path": str(render_png_path),
         }
+        if decision_trace is not None:
+            metadata["decision_trace"] = decision_trace.model_dump(mode="json")
         _write_json(artifact_dir / "metadata.json", metadata)
 
         with self._connect() as conn:
@@ -128,13 +135,24 @@ class SpriteArtifactStore:
 
     def read_asset_spec(self, artifact_id: str) -> AssetSpec:
         artifact = self.load_artifact(artifact_id)
-        return AssetSpec.model_validate(json.loads(artifact.asset_spec_json_path.read_text(encoding="utf-8")))
+        try:
+            payload = json.loads(artifact.asset_spec_json_path.read_text(encoding="utf-8"))
+            return AssetSpec.model_validate(payload)
+        except (OSError, json.JSONDecodeError, ValidationError) as exc:
+            raise SpriteArtifactStoreError(f"Sprite artifact {artifact_id} contains an invalid Asset Spec") from exc
 
     def read_blueprint(self, artifact_id: str) -> SpriteBlueprint:
         artifact = self.load_artifact(artifact_id)
         if artifact.blueprint_json_path is None or not artifact.blueprint_json_path.exists():
             raise SpriteArtifactStoreError(f"Sprite artifact {artifact_id} does not yet have a blueprint")
         return SpriteBlueprint.model_validate(json.loads(artifact.blueprint_json_path.read_text(encoding="utf-8")))
+
+    def read_metadata(self, artifact_id: str) -> dict[str, object]:
+        artifact = self.load_artifact(artifact_id)
+        path = artifact.artifact_dir / "metadata.json"
+        if not path.exists():
+            raise SpriteArtifactStoreError(f"Sprite artifact {artifact_id} has no metadata")
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def save_blueprint(
         self, artifact_id: str, blueprint: SpriteBlueprint, *, generation: dict[str, object] | None = None
@@ -161,6 +179,11 @@ class SpriteArtifactStore:
         )
         return self.load_artifact(artifact_id)
 
+    def mark_blueprint_failed(self, artifact_id: str, *, generation_error: dict[str, object]) -> SpriteArtifact:
+        """Persist bounded diagnostics without writing a rejected blueprint or render."""
+        self._update_status(artifact_id, status="blueprint_failed", generation_error=generation_error)
+        return self.load_artifact(artifact_id)
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -176,11 +199,17 @@ class SpriteArtifactStore:
         *,
         status: str,
         blueprint_generation: dict[str, object] | None = None,
+        generation_error: dict[str, object] | None = None,
     ) -> None:
         with self._connect() as conn:
             conn.execute("UPDATE sprite_artifacts SET status = ? WHERE id = ?", (status, artifact_id))
             conn.commit()
-        self._write_metadata(artifact_id, status=status, blueprint_generation=blueprint_generation)
+        self._write_metadata(
+            artifact_id,
+            status=status,
+            blueprint_generation=blueprint_generation,
+            generation_error=generation_error,
+        )
 
     def _update_render_path(self, artifact_id: str, render_png_path: Path) -> None:
         with self._connect() as conn:
@@ -198,6 +227,7 @@ class SpriteArtifactStore:
         status: str,
         render_png_path: Path | None = None,
         blueprint_generation: dict[str, object] | None = None,
+        generation_error: dict[str, object] | None = None,
     ) -> None:
         artifact = self.load_artifact(artifact_id)
         metadata_path = artifact.artifact_dir / "metadata.json"
@@ -219,6 +249,12 @@ class SpriteArtifactStore:
         saved_generation = blueprint_generation or existing.get("blueprint_generation")
         if saved_generation is not None:
             metadata["blueprint_generation"] = saved_generation
+        saved_error = generation_error or existing.get("generation_error")
+        if saved_error is not None:
+            metadata["generation_error"] = saved_error
+        decision_trace = existing.get("decision_trace")
+        if decision_trace is not None:
+            metadata["decision_trace"] = decision_trace
         _write_json(metadata_path, metadata)
 
 

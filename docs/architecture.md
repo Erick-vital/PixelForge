@@ -1,198 +1,128 @@
 # Arquitectura de PixelForge
 
-## Propósito
-
-PixelForge genera sprites PNG pixel-art de forma procedural y reproducible. El flujo principal transforma una petición de usuario en datos estructurados antes de rasterizar:
+## Flujo
 
 ```text
-Prompt
-  -> Asset Spec
-  -> Sprite Blueprint
-  -> rasterizador genérico + outline pass
-  -> validación de calidad
-  -> PNG + artefacto persistido
+Prompt -> intérprete semántico -> AssetSpec
+  -> selección de estrategia
+     -> creativo/auto: LLM -> SpriteBlueprint JSON validado
+     -> controlado: GrammarRegistry -> grammar -> skeleton -> partes/layers/materiales -> SpriteBlueprint
+  -> compositor/rasterizador genérico -> outline/paleta/calidad -> artifact
 ```
 
-El renderer no contiene conocimiento de subjects específicos. Los subjects y sus geometrías viven en la generación de blueprints; el renderer solamente conoce primitives.
+El camino creativo es LLM-first incluso cuando existe una gramática compatible. El modo `controlled` y la estrategia explícita `procedural` conservan el compilador determinista. El renderer consume únicamente `SpriteBlueprint`: no importa gramáticas, no llama modelos y no conoce subjects.
 
-## Capas del proyecto
+## Contratos y conceptos
 
-| Capa | Directorio | Responsabilidad |
-| --- | --- | --- |
-| HTTP | `app/routes/` | Parsear solicitudes, inyectar servicios, traducir errores y devolver JSON, HTML o PNG. |
-| Contratos | `app/schemas/` | Modelos Pydantic públicos: Asset Spec, requests, Sprite Blueprint y primitives. |
-| Modelos internos | `app/models/` | Dataclasses y DTOs internos que cruzan límites de aplicación, por ejemplo artefactos y reportes. |
-| Motor de sprites | `app/sprite_engine/` | Dominio aislado: character skeletons, recipes, composición futura, rendering y calidad. |
-| Servicios | `app/services/` | Orquestación, interpretación, persistencia, LLM, configuración y adaptadores de aplicación. |
-| UI | `app/templates/`, `app/static/` | Páginas Jinja2, fragments HTMX y estilos. |
-| Pruebas | `tests/` | Pruebas herméticas de servicios, renderer, API y UI. |
+- **family**: familia geométrica (`humanoid`, `quadruped`, `dragon`, `prop`, `unknown`).
+- **archetype**: variante semántica extensible, persistida como string (por ejemplo `warrior`).
+- **template**: intención de producto tipada (`warrior_front`, `warrior_side`, `wizard_front`, `pig_side`) que fija familia, arquetipo, vista y, cuando aplica, pose; nunca contiene geometría.
+- **blueprint strategy**: backend solicitado (`auto`, `procedural`, `llm_blueprint`); no es una template ni una recipe.
+- **grammar**: compilador determinista de un spec tipado a blueprint; no llama al LLM.
+- **skeleton**: anchors e invariantes geométricas de una familia/vista.
+- **recipe**: identificador persistido de la construcción concreta (`humanoid_side/warrior`). Las recipes históricas de dragon/potion/sword continúan disponibles para compatibilidad de `auto`.
+- **renderer**: compositor genérico de primitives, layers, materiales, iluminación y outline.
 
-`SpriteService` (`app/services/sprite.py`) es la capa de orquestación. Las rutas API y web no deberían reimplementar lógica de generación, calidad o persistencia.
+`AssetSpec.family`, `archetype` y `generation_mode` tienen defaults compatibles. `SpriteBlueprint.layer_order`, `material_roles` y `lighting_direction` también tienen defaults, por lo que JSON históricos siguen validando.
 
-### Límite `sprite_engine`
+## Intención de request y procedencia de vista
 
-La reestructuración introduce `app/sprite_engine/` como límite del dominio de sprites. El `AssetSpec` público y los artefactos existentes conservan su flujo; el contrato interno humanoide cambió de `humanoid` a `character`.
+`POST /api/asset-spec` y el formulario HTMX aceptan opcionalmente `view`, `template_id`, `generation_mode` y `blueprint_strategy`. La precedencia de vista es: template > `view` explícito > default determinista > interpretación. Para humanoid, prop y unknown el default inicial es `icon/front`; el LLM no decide esa vista por defecto. La respuesta incluye `decision_trace` seguro (`requested_view`, `view_source`, `template_id`) y el mismo objeto se conserva en `metadata.json` del artifact.
 
-```text
-sprite_engine/
-  character/spec.py           # CharacterSpec composicional
-  character/skeleton.py       # Traits, anchors e invariantes geométricas
-  recipes/humanoid.py         # Compilación humanoide -> primitives por capa
-  rendering/rasterizer.py     # Máscaras alpha semánticas por capa
-  quality/structural.py       # Conectividad, occupancy y píxeles aislados
-```
+| Template | Family/archetype | Vista | Pose |
+| --- | --- | --- | --- |
+| `warrior_front` | humanoid / warrior | `icon/front` | `front_neutral` |
+| `warrior_side` | humanoid / warrior | `side-view` | `side_neutral` |
+| `wizard_front` | humanoid / wizard | `icon/front` | `front_neutral` |
+| `pig_side` | quadruped / pig | `side-view` | — |
 
-`app/models/humanoid.py`, `app/services/humanoid_sprite.py` y `app/services/sprite_quality.py` fueron eliminados tras la migración; los imports internos y las pruebas usan directamente `sprite_engine`. Esto rompe deliberadamente esas rutas Python antiguas para impedir que el dominio vuelva a dispersarse.
+## Selección
 
-El primer incremento composicional agrega `character/spec.py`, `recipes/humanoid.py` y `rendering/rasterizer.py`: `CharacterSpec` expresa anatomy, pose, face, hair, clothing, equipment, materials y lighting; la receta emite primitives etiquetadas por capa y el rasterizador puede inspeccionar máscaras alpha por capa.
+`blueprint_strategy` selecciona backend; `generation_mode` expresa intención:
 
-## Pipeline de sprites
+| Estrategia/modo | Resultado |
+| --- | --- |
+| `procedural` | exige grammar compatible; si no existe, error explícito |
+| `llm_blueprint` | LLM, sin consultar el modo |
+| `auto` + `controlled` | grammar obligatoria |
+| `auto` + `exploratory` | LLM; es el default de creación |
+| `auto` + `auto` | LLM creativo; conserva el reason de capability cuando no existe grammar |
 
-### 1. Asset Spec
+El clasificador central de `grammar/classification.py` se usa durante interpretación y su resultado queda persistido; el registry no reclasifica por substrings.
 
-`POST /api/asset-spec` recibe un prompt y usa `app/services/sprite_interpretation.py` para crear el `AssetSpec` canónico. El spec reúne subject, tipo, view, tamaño, palette, shape, restricciones técnicas y processing profile.
+## Capabilities implementadas
 
-El artefacto se crea inmediatamente mediante `SpriteArtifactStore`:
+| Grammar | Family | Views | Archetypes | Skeleton |
+| --- | --- | --- | --- | --- |
+| `humanoid_front` | humanoid | `icon/front` | generic, blacksmith, warrior, wizard | `HumanoidSkeleton` |
+| `humanoid_side` | humanoid | `side-view` | generic, warrior | `HumanoidSideSkeleton` |
+| `quadruped_side` | quadruped | `side-view` | pig | `QuadrupedSkeleton` |
 
-- `asset-spec.json`
-- `blueprint.json` cuando esté disponible
-- `render.png` cuando se renderice
-- `metadata.json`
-- una fila en SQLite
+No están implementados wizard lateral, wolf/dog procedural, dragon como grammar nueva, top-down 3/4, animación ni perspectiva libre. Esos pedidos usan fallback LLM en `auto`.
 
-La configuración de rutas y base de datos viene de `app/services/settings.py` mediante variables `APP_*`.
+## Compilación y render
 
-### 2. Generación de blueprint
+Las gramáticas viven en `app/sprite_engine/grammar/`; skeletons/specs acotados en `character/`. Humanoide frontal reutiliza `build_humanoid_skeleton()` y la compilación histórica de partes. Los skeletons lateral y cuadrúpedo son independientes. El cerdo usa cuatro patas conectadas y apoyadas, hocico delantero y cola trasera.
 
-`POST /api/blueprint` recibe un `artifact_id`, una estrategia y un seed.
+Los blueprints declaran orden de capas, roles de material y `lighting_direction`. `rendering/rasterizer.py` compone canvases RGBA por capa y aplica ramps de cloth/leather/wood/metal/skin/hair; `top_left` y `top_right` invierten bordes iluminados. La validación semántica comprueba recipe/grammar, layers, fills de materiales y partes estructurales mínimas antes de persistir.
 
-`app/services/sprite_blueprint.py` resuelve la estrategia:
+## Validación semántica y reparación LLM
 
-- `auto`: receta procedural si el subject es conocido; LLM en caso contrario.
-- `procedural`: usa una receta local, incluido el fallback `generic_prop`.
-- `llm_blueprint`: solicita JSON estricto al proveedor configurado.
+Antes de persistir un blueprint, se valida el schema, contratos de grammar/layers/materiales, semántica determinista y calidad raster. Para humanoides, la semántica mide la silueta raster y las primitives: un lateral rechaza `side_view_symmetry_too_high`, `side_view_missing_directional_feature` o `side_view_missing_limb_depth`; un frontal LLM puede rechazar `front_view_symmetry_too_low`. Las grammars además reportan conflictos de familia/vista, recipe, layers, materiales y requisitos de arquetipo.
 
-El LLM devuelve datos, nunca código de renderer. Antes de persistir, un blueprint LLM pasa por:
+Una grammar que falla es un error de código y no se reintenta. Un blueprint LLM que falla schema, semántica o raster recibe exactamente un repair con el Asset Spec canónico, diagnósticos acotados y el candidato original marcado explícitamente como datos no confiables. El candidato rechazado no se persiste como artifact exitoso. Si el repair también falla, el artifact queda `blueprint_failed` con `generation_error` y no se escribe `blueprint.json` ni `render.png` como éxito. Los reports semánticos aprobados se guardan en `metadata.json.blueprint_generation.semantic_quality` y se muestran en la UI.
 
-1. extracción de JSON;
-2. validación Pydantic de `SpriteBlueprint`;
-3. validación semántica: palette, fills, coordenadas `0..63`, primitive budget y geometría;
-4. raster temporal y validación de calidad;
-5. a lo sumo una solicitud de reparación si cualquier paso falla.
+Los artifacts históricos no se modifican: la corrección de un resultado antiguo requiere crear/regenerar un artifact nuevo de forma deliberada.
 
-No existe fallback silencioso desde un LLM inválido a un sprite genérico.
+## Fallback LLM y lineaje
 
-### 3. Blueprints y primitives
+El contrato LLM permite `primitive.layer`, `layer_order`, `material_roles` y `lighting_direction`; se validan layers, fills, materiales, coordenadas, primitive budget y calidad raster. No hay fallback silencioso a `generic_prop`.
 
-Los blueprints se definen en una cuadrícula base de 64x64 y usan sólo estas operaciones:
-
-- `ellipse`
-- `rectangle`
-- `polygon`
-- `line`
-- `point`
-
-El renderer escala las primitives a 32, 64 o 128px. Un `SpriteBlueprint` también incluye un `SpriteOutlineSpec` persistible:
+`metadata.json.blueprint_generation` registra:
 
 ```json
 {
-  "enabled": true,
-  "color_key": "outline",
-  "width": 1
+  "requested_strategy": "auto",
+  "resolved_strategy": "procedural",
+  "strategy": "procedural",
+  "grammar": "humanoid_side",
+  "grammar_version": 1,
+  "family": "humanoid",
+  "archetype": "warrior",
+  "skeleton": "HumanoidSideSkeleton",
+  "fallback_reason": null,
+  "seed": 0
 }
 ```
 
-El default es `enabled=false` para preservar el aspecto de blueprints históricos. Las recetas nuevas habilitan explícitamente el outline.
+`strategy` se conserva como alias histórico. En LLM, grammar/skeleton son `null` y `fallback_reason` explica la capability faltante. No se guardan respuestas crudas ni secretos.
 
-### 4. Renderer y outline pass
+## Añadir una grammar
 
-`app/services/procedural_sprite.py` contiene temporalmente el rasterizador genérico y las recipes legacy de prop/dragon/potion/sword. El dominio humanoide vive en `app/sprite_engine/recipes/humanoid.py`; `app/sprite_engine/rendering/rasterizer.py` expone las máscaras alpha por capa para inspección y composición. El renderer principal todavía rasteriza primitives en orden, por lo que la composición RGBA completa por máscara queda como siguiente incremento.
+1. Añadir spec/skeleton tipados con invariantes y tests.
+2. Implementar `name`, `capabilities`, `skeleton_name`, `supports(spec completo)` y `compile()`.
+3. Registrar el compilador en `GrammarRegistry`.
+4. Probar reproducibilidad, bounds, layers/materiales, routing y fallback.
+5. Añadir fixture/contact sheet si afecta una referencia visual.
 
-1. crear canvas RGBA transparente;
-2. escalar y rasterizar primitives de atrás hacia adelante;
-3. si `outline.enabled`, convertir alpha en máscara, dilatarla con vecindad de 8 vecinos y pintar `dilate(alpha) AND NOT alpha` detrás del contenido;
-4. limitar la paleta;
-5. serializar como PNG y construir el reporte técnico.
+No se modifica el renderer para añadir una familia.
 
-El outline es el borde externo de la silueta. No sustituye detalles internos como ojos, divisiones o líneas decorativas: éstos permanecen como primitives con `fill="outline"` cuando corresponde.
+## Persistencia e interfaces
 
-## Recetas procedurales
+`SpriteService` orquesta y `SpriteArtifactStore` guarda `asset-spec.json`, `blueprint.json`, `render.png`, `metadata.json` e índice SQLite. Las rutas FastAPI permanecen delgadas. La UI HTMX muestra strategy, family, archetype, grammar y razón.
 
-`known_procedural_recipe()` centraliza la selección de recipes para evitar discrepancias entre `auto` y el builder local.
-
-| Subject/token | Recipe | Generador |
-| --- | --- | --- |
-| `dragon` | `baby_dragon` | `procedural_sprite.py` |
-| `potion` | `potion` | `procedural_sprite.py` |
-| `sword` | `sword` | `procedural_sprite.py` |
-| `human`, `humanoid`, `person`, `chibi` | `humanoid_character` | `app/sprite_engine/recipes/humanoid.py` |
-| cualquier otro (sólo estrategia procedural) | `generic_prop` | `procedural_sprite.py` |
-
-### Humanoide chibi parametrizable
-
-`HumanoidSkeleton` (`app/sprite_engine/character/skeleton.py`) contiene anchors e invariantes del cuerpo base. `CharacterSpec` (`app/sprite_engine/character/spec.py`) agrupa `anatomy`, `pose`, `face`, `hair`, `clothing`, `equipment`, `materials` y `lighting`. La receta `compile_humanoid_character()` convierte ambos en primitives etiquetadas con capas semánticas: `back_equipment`, `pants`, `boots`, `torso`, `arms`, `head`, `hair`, `front_equipment`, `shadows` y `highlights`.
-
-`AssetSpec.character` reemplaza al contrato anterior `AssetSpec.humanoid`. La anatomía continúa usando valores acotados (`height`, `build`, `head_size`, `leg_length`) y se resuelve a coordenadas seguras de 64px. La receta mantiene orden de anchors, conexión de extremidades, simetría frontal, canvas bounds y línea de suelo. Ante combinaciones incompatibles, limita la dimensión menos crítica para conservar el torso conectado.
-
-La implementación procedural local sigue soportando sólo la pose frontal simétrica. Con `strategy=auto`, un humanoide `side-view` se dirige a `llm_blueprint`; no se reporta como éxito procedural un chibi frontal que contradiga la vista solicitada. Las capas alpha pueden inspeccionarse con `render_layer_masks()`.
-
-## Calidad raster
-
-`app/sprite_engine/quality/structural.py` analiza el canal alpha del PNG final. La política inicial para un sprite unitario exige:
-
-- exactamente un componente opaco, usando conectividad de 8 vecinos;
-- occupancy ratio entre `0.08` y `0.70`;
-- cero componentes de un solo píxel.
-
-El servicio devuelve `SpriteQualityReport` con métricas y issues estables:
-
-- `component_count`
-- `occupancy_too_low`
-- `occupancy_too_high`
-- `isolated_pixels`
-
-`SpriteService.render_sprite()` y `render_blueprint()` validan calidad antes de guardar `render.png`. Un fallo se traduce a `SpriteError`, por lo que las rutas devuelven un error controlado y el artefacto no se marca como renderizado exitosamente.
-
-Los endpoints de render incluyen además headers compactos:
-
-- `X-PixelForge-Quality-Passed`
-- `X-PixelForge-Quality-Components`
-- `X-PixelForge-Quality-Occupancy`
-- `X-PixelForge-Quality-Isolated-Pixels`
-
-## Persistencia y lineaje
-
-`SpriteArtifactStore` persiste los archivos del artefacto y mantiene SQLite como índice. `metadata.json` conserva timestamps, status, rutas y la procedencia del blueprint (estrategia, provider/model cuando aplica y seed).
-
-Al renderizar, PixelForge prefiere siempre `blueprint.json` persistido. Sólo construye directamente desde el Asset Spec cuando el artefacto todavía no tiene blueprint. Esto evita que un render posterior sustituya un blueprint LLM válido por una receta local diferente.
-
-## Interfaces
-
-### JSON API
-
-- `POST /api/asset-spec`: crear y persistir un Asset Spec.
-- `POST /api/blueprint`: crear y persistir un blueprint.
-- `POST /api/render-sprite`: renderizar blueprint persistido o receta local inicial.
-- `POST /api/render-blueprint`: renderizar el blueprint persistido.
-- `POST /api/process-sprite`: procesar un PNG externo según un Asset Spec.
-- `GET /api/settings`: exponer configuración no secreta.
-
-### Web
-
-- `GET /sprite`: página Jinja2 del flujo principal.
-- `POST /ui/sprite/spec`: HTMX para Asset Spec + blueprint.
-- `POST /ui/sprite/render` y `/ui/sprite/render-blueprint`: fragments de preview PNG.
-
-La UI preserva el patrón de swap `#results` y feedback visible de progreso, éxito y error.
-
-## Verificación de cambios
-
-Para cambios Python en PixelForge:
+El benchmark frontal se genera sin artifacts de producto:
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest -q
+uv run python scripts/render_grammar_contact_sheet.py
+# /tmp/pixelforge-grammar-front-contact-sheet.png
 ```
 
-Para cambios de comportamiento runtime, iniciar `uvicorn`, validar el endpoint afectado y detener el proceso después del smoke test.
+## Verificación
+
+```bash
+uv run ruff format .
+uv run ruff check .
+uv run pytest -q
+git diff --check
+```

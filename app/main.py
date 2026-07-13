@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.routes.admin import router as admin_router
 from app.routes.api import router as api_router
 from app.routes.web import router as web_router
 from app.services.logging_config import configure_logging
@@ -24,3 +25,4 @@ def health() -> dict[str, str]:
 
 app.include_router(web_router)
 app.include_router(api_router)
+app.include_router(admin_router)

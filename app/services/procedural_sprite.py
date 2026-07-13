@@ -12,6 +12,7 @@ from app.schemas.sprite import AssetSpec, SpriteBlueprint, SpriteOutlineSpec, Sp
 from app.sprite_engine.character.skeleton import HumanoidTraits, build_humanoid_skeleton
 from app.sprite_engine.character.spec import CharacterSpec
 from app.sprite_engine.recipes.humanoid import compile_humanoid_character
+from app.sprite_engine.rendering.rasterizer import compose_blueprint_layers
 
 logger = logging.getLogger(__name__)
 
@@ -155,8 +156,7 @@ def _blueprint_for_sword(subject: str, palette: dict[str, str], rng: np.random.G
 def render_blueprint(
     blueprint: SpriteBlueprint, *, width: int, height: int, seed: int = 0, max_colors: int = 24
 ) -> ProceduralSpriteResult:
-    canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(canvas)
+    canvas, _layer_masks = compose_blueprint_layers(blueprint, width=width, height=height)
     palette = {name: _rgba(hex_color) for name, hex_color in blueprint.palette.items()}
 
     logger.info(
@@ -170,15 +170,11 @@ def render_blueprint(
             "primitive_count": len(blueprint.primitives),
         },
     )
-    scale_x = width / BASE_CANVAS_SIZE
-    scale_y = height / BASE_CANVAS_SIZE
-    for primitive in blueprint.primitives:
-        _render_primitive(draw, _scale_primitive(primitive, scale_x, scale_y), palette)
 
     if blueprint.outline.enabled:
         if blueprint.outline.color_key not in palette:
             raise ProceduralSpriteError(f"outline color key {blueprint.outline.color_key!r} is not in the palette")
-        outline_width = max(1, round(blueprint.outline.width * min(scale_x, scale_y)))
+        outline_width = max(1, round(blueprint.outline.width * min(width, height) / BASE_CANVAS_SIZE))
         canvas = _apply_outline_pass(canvas, color=palette[blueprint.outline.color_key], width=outline_width)
 
     canvas = _limit_palette(canvas, max_colors=max_colors)

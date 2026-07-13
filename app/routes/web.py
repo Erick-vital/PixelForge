@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.schemas.sprite import AssetSpecRequest, BlueprintStrategy
+from app.schemas.sprite import AssetSpecRequest, BlueprintStrategy, GenerationMode
 from app.services.settings import (
     env_file_path,
     get_app_settings,
@@ -62,16 +62,37 @@ async def run_sprite_spec_ui(
     request: Request,
     prompt: str = Form(...),
     use_llm: bool = Form(default=True),
+    view: str | None = Form(default=None),
+    generation_mode: GenerationMode = Form(default="exploratory"),
     blueprint_strategy: BlueprintStrategy = Form(default="auto"),
+    template_id: str | None = Form(default=None),
     service: SpriteService = Depends(get_sprite_service),
 ) -> HTMLResponse:
     logger.info(
         "sprite ui request started",
-        extra={"prompt_chars": len(prompt), "use_llm": use_llm, "blueprint_strategy": blueprint_strategy},
+        extra={
+            "prompt_chars": len(prompt),
+            "use_llm": use_llm,
+            "view": view,
+            "generation_mode": generation_mode,
+            "blueprint_strategy": blueprint_strategy,
+            "template_id": template_id,
+        },
     )
     try:
-        asset_spec, artifact = await service.create_asset_spec(AssetSpecRequest(prompt=prompt, use_llm=use_llm))
-        blueprint, _artifact = await service.create_sprite_blueprint(
+        asset_spec, artifact, decision_trace = await service.create_asset_spec(
+            AssetSpecRequest.model_validate(
+                {
+                    "prompt": prompt,
+                    "use_llm": use_llm,
+                    "view": view or None,
+                    "generation_mode": generation_mode,
+                    "blueprint_strategy": blueprint_strategy,
+                    "template_id": template_id or None,
+                }
+            )
+        )
+        blueprint, generated_artifact = await service.create_sprite_blueprint(
             artifact.artifact_id, strategy=blueprint_strategy, seed=0
         )
     except ValueError as exc:  # includes SpriteError and pydantic ValidationError
@@ -96,6 +117,8 @@ async def run_sprite_spec_ui(
         context={
             "prompt": prompt,
             "blueprint_strategy": blueprint_strategy,
+            "decision_trace": decision_trace,
+            "generation": service.get_blueprint_generation(generated_artifact.artifact_id),
             "artifact_id": artifact.artifact_id,
             "artifact_dir": str(artifact.artifact_dir),
             "asset_spec": asset_spec,

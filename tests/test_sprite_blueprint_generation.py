@@ -124,9 +124,10 @@ def test_llm_blueprint_generation_validates_and_normalizes_a_heart_blueprint():
 
 
 def test_llm_blueprint_generation_repairs_one_malformed_json_response():
+    malformed = '{"recipe":"plate","subject":"plate of food","palette":{"base":"#e8c39e"},"primitives":[{"op":"ellipse" "fill":"base","bbox":[4,4,60,60]}]}'
     llm = SequencedBlueprintLlm(
         [
-            '{"recipe":"plate","subject":"plate of food","palette":{"base":"#e8c39e"},"primitives":[{"op":"ellipse" "fill":"base","bbox":[4,4,60,60]}]}',
+            malformed,
             '{"recipe":"plate","subject":"plate of food","palette":{"base":"#e8c39e"},"primitives":[{"op":"ellipse","fill":"base","bbox":[4,4,60,60]}]}',
         ]
     )
@@ -136,6 +137,10 @@ def test_llm_blueprint_generation_repairs_one_malformed_json_response():
     assert generated.blueprint.recipe == "llm_blueprint"
     assert len(llm.calls) == 2
     assert "Repair the candidate" in str(llm.calls[1]["system_prompt"])
+    repair_prompt = json.loads(str(llm.calls[1]["prompt"]))
+    assert "untrusted_candidate" in repair_prompt
+    assert repair_prompt["untrusted_candidate"] == malformed
+    assert repair_prompt["asset_spec"]["subject"] == "heart"
 
 
 def test_llm_blueprint_generation_rejects_an_undeclared_palette_fill():
@@ -156,15 +161,57 @@ def test_llm_blueprint_generation_rejects_an_undeclared_palette_fill():
         asyncio.run(generate_sprite_blueprint(_heart_spec(), strategy="llm_blueprint", seed=0, llm_service=llm))
 
 
-def test_auto_uses_known_procedural_recipe_without_an_llm_call():
-    llm = FakeBlueprintLlm("this must not be used")
+def test_auto_without_compatible_grammar_uses_llm_not_legacy_recipe():
+    llm = FakeBlueprintLlm(
+        '{"recipe":"dragon","subject":"dragon","palette":{"base":"#d06030"},'
+        '"primitives":[{"op":"ellipse","fill":"base","bbox":[12,12,52,52]}]}'
+    )
     dragon = AssetSpec.model_validate({"subject": "baby dragon", "size": {"width": 64, "height": 64}})
 
     generated = asyncio.run(generate_sprite_blueprint(dragon, strategy="auto", seed=3, llm_service=llm))
 
-    assert generated.strategy == "procedural"
-    assert generated.blueprint.recipe == "baby_dragon"
-    assert llm.calls == []
+    assert generated.strategy == "llm_blueprint"
+    assert generated.blueprint.recipe == "llm_blueprint"
+    assert len(llm.calls) == 1
+    assert generated.fallback_reason == "no grammar supports unknown icon/front generic"
+
+
+def test_exploratory_auto_preserves_missing_grammar_reason():
+    llm = FakeBlueprintLlm(
+        '{"recipe":"dragon","subject":"dragon","palette":{"base":"#d06030"},'
+        '"primitives":[{"op":"ellipse","fill":"base","bbox":[12,12,52,52]}]}'
+    )
+    dragon = AssetSpec.model_validate(
+        {"generation_mode": "exploratory", "subject": "baby dragon", "size": {"width": 64, "height": 64}}
+    )
+
+    generated = asyncio.run(generate_sprite_blueprint(dragon, strategy="auto", seed=3, llm_service=llm))
+
+    assert generated.strategy == "llm_blueprint"
+    assert generated.fallback_reason == "no grammar supports unknown icon/front generic"
+
+
+def test_creative_auto_uses_llm_even_when_a_procedural_grammar_exists():
+    llm = FakeBlueprintLlm(
+        '{"recipe":"wizard","subject":"wizard","palette":{"base":"#5e3fc2"},'
+        '"primitives":[{"op":"ellipse","fill":"base","bbox":[12,8,52,56]}]}'
+    )
+    wizard = AssetSpec.model_validate(
+        {
+            "generation_mode": "auto",
+            "family": "humanoid",
+            "archetype": "wizard",
+            "subject": "wizard",
+            "character": {},
+        }
+    )
+
+    generated = asyncio.run(generate_sprite_blueprint(wizard, strategy="auto", seed=3, llm_service=llm))
+
+    assert generated.strategy == "llm_blueprint"
+    assert generated.grammar is None
+    assert generated.fallback_reason == "creative auto mode"
+    assert len(llm.calls) == 1
 
 
 def test_llm_blueprint_generation_wraps_provider_errors():
@@ -205,12 +252,16 @@ def test_service_persists_llm_blueprint_generation_lineage(tmp_path):
     assert saved_artifact.status == "blueprint_ready"
     assert metadata["created_at"]
     assert metadata["updated_at"]
-    assert metadata["blueprint_generation"] == {
-        "strategy": "llm_blueprint",
-        "provider": "fake",
-        "model": "fake-blueprint-model",
-        "seed": 11,
-    }
+    generation = metadata["blueprint_generation"]
+    assert generation["strategy"] == "llm_blueprint"  # legacy alias
+    assert generation["requested_strategy"] == "auto"
+    assert generation["resolved_strategy"] == "llm_blueprint"
+    assert generation["provider"] == "fake"
+    assert generation["model"] == "fake-blueprint-model"
+    assert generation["grammar"] is None
+    assert generation["skeleton"] is None
+    assert generation["fallback_reason"]
+    assert generation["seed"] == 11
 
 
 def test_render_sprite_prefers_a_persisted_blueprint_over_the_generic_recipe(tmp_path):

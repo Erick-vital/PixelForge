@@ -209,6 +209,17 @@ def compile_humanoid_character(
         palette=palette,
         primitives=primitives,
         layer_order=list(DEFAULT_LAYER_ORDER),
+        material_roles={
+            "skin": "skin",
+            "hair": "hair",
+            "shirt": "cloth",
+            "sleeve": "cloth",
+            "pants": "cloth",
+            "apron": "leather",
+            "boots": "leather",
+            "equipment_wood": "wood",
+            "equipment_metal": "metal",
+        },
         outline=SpriteOutlineSpec(enabled=True),
         notes=["procedural compositional humanoid", "semantic layers and masks", "front-facing symmetric pose"],
     )

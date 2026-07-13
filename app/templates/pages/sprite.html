@@ -5,8 +5,8 @@
 {% block content %}
   <section class="card">
     <p class="eyebrow">PixelForge Sprite</p>
-    <h1>Prompt to Sprite Processing Instructions</h1>
-    <p class="lead">Escribe un prompt y genera una Asset Spec, un prompt técnico de imagen y un plan de postprocesado 2D.</p>
+    <h1>Prompt to Sprite</h1>
+    <p class="lead">Describe el sprite: la IA diseña un blueprint JSON validado y PixelForge lo renderiza de forma procedural.</p>
     <form
       hx-post="/ui/sprite/spec"
       hx-target="#results"
@@ -17,11 +17,36 @@
       <label for="prompt">Prompt
         <textarea id="prompt" name="prompt" rows="7" placeholder="Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down" required>Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down</textarea>
       </label>
+      <label for="view">Vista
+        <select id="view" name="view">
+          <option value="" selected>Auto/default: icon/front determinista</option>
+          <option value="icon/front">Frontal</option>
+          <option value="side-view">Lateral</option>
+          <option value="top-down 3/4">Top-down 3/4</option>
+        </select>
+      </label>
+      <label for="template_id">Plantilla
+        <select id="template_id" name="template_id">
+          <option value="" selected>Auto/default: sin plantilla</option>
+          <option value="warrior_front">Guerrero frontal</option>
+          <option value="warrior_side">Guerrero lateral</option>
+          <option value="wizard_front">Mago frontal</option>
+          <option value="pig_side">Cerdo lateral</option>
+        </select>
+      </label>
+      <p class="muted">Las plantillas fijan intención semántica —familia, vista y pose—, pero no coordenadas ni una receta visual.</p>
+      <label for="generation_mode">Modo de generación
+        <select id="generation_mode" name="generation_mode">
+          <option value="exploratory" selected>Creativo: blueprint diseñado por IA</option>
+          <option value="controlled">Controlado: gramática procedural determinista</option>
+          <option value="auto">Auto creativo: IA salvo control explícito</option>
+        </select>
+      </label>
       <label for="blueprint_strategy">Generación de blueprint
         <select id="blueprint_strategy" name="blueprint_strategy">
-          <option value="auto" selected>Auto: receta local conocida o LLM para objetos nuevos</option>
-          <option value="llm_blueprint">LLM: generar blueprint JSON validado</option>
-          <option value="procedural">Procedural: usar receta local</option>
+          <option value="auto" selected>Auto: respeta el modo creativo/controlado</option>
+          <option value="llm_blueprint">IA: generar blueprint JSON validado</option>
+          <option value="procedural">Procedural: exigir gramática local</option>
         </select>
       </label>
       <div class="action-row">

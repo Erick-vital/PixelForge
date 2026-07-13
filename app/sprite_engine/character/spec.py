@@ -2,50 +2,57 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
-class AnatomySpec(BaseModel):
+class SemanticModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class AnatomySpec(SemanticModel):
     height: Literal["short", "average", "tall"] = "average"
     build: Literal["slim", "average", "broad", "heavy"] = "average"
     head_size: Literal["small", "average", "large"] = "average"
     leg_length: Literal["short", "average", "long"] = "average"
 
 
-class PoseSpec(BaseModel):
-    stance: Literal["front_neutral"] = "front_neutral"
+class PoseSpec(SemanticModel):
+    stance: Literal["front_neutral", "side_neutral"] = "front_neutral"
     arm_pose: Literal["sides"] = "sides"
+    direction: Literal["left", "right"] = "right"
 
 
-class FaceSpec(BaseModel):
+class FaceSpec(SemanticModel):
     style: Literal["simple"] = "simple"
 
 
-class HairSpec(BaseModel):
+class HairSpec(SemanticModel):
     style: Literal["none", "short", "short_messy"] = "none"
     color: str | None = None
 
 
-class ClothingSpec(BaseModel):
-    upper: Literal["none", "tunic", "leather_apron", "armor"] = "tunic"
-    lower: Literal["none", "work_pants", "trousers"] = "trousers"
+class ClothingSpec(SemanticModel):
+    headwear: Literal["none", "helmet", "wizard_hat"] = "none"
+    upper: Literal["none", "tunic", "leather_apron", "armor", "robe"] = "tunic"
+    lower: Literal["none", "work_pants", "trousers", "armored_legs", "robe_lower"] = "trousers"
     footwear: Literal["none", "heavy_boots", "boots"] = "boots"
 
 
-class EquipmentSpec(BaseModel):
-    hand: Literal["none", "blacksmith_hammer"] = "none"
+class EquipmentSpec(SemanticModel):
+    hand: Literal["none", "blacksmith_hammer", "hammer", "sword", "staff"] = "none"
+    off_hand: Literal["none", "shield", "book"] = "none"
 
 
-class MaterialSpec(BaseModel):
+class MaterialSpec(SemanticModel):
     upper: Literal["cloth", "leather", "metal"] = "cloth"
     equipment: Literal["wood", "metal"] = "wood"
 
 
-class LightingSpec(BaseModel):
+class LightingSpec(SemanticModel):
     direction: Literal["top_left", "top_right"] = "top_left"
 
 
-class CharacterSpec(BaseModel):
+class CharacterSpec(SemanticModel):
     """Composable, bounded character identity compiled by a local recipe."""
 
     anatomy: AnatomySpec = AnatomySpec()

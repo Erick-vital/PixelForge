@@ -16,7 +16,9 @@ The product focus is:
 
 - FastAPI JSON API
 - Canonical Sprite Asset Spec with structured `CharacterSpec` for humanoid anatomy, pose, face, hair, clothing, equipment, materials, and lighting
-- Procedural humanoid composition with semantic layers and inspectable alpha masks
+- Typed visual grammars selected by persisted `family`, `archetype`, view, pose, and capabilities
+- Front humanoid grammars (generic, blacksmith, warrior, wizard), side humanoids (generic, warrior), and side pig quadrupeds
+- Procedural composition with semantic RGBA layers, inspectable alpha masks, and deterministic material-local shading
 - Separate interpretation and processing services
 - Procedural sprite rendering in Python with Pillow + NumPy
 - 2D sprite post-processing with Pillow
@@ -35,7 +37,9 @@ The browser front lives at:
 
 It has:
 - a text box for the prompt
-- a visible blueprint strategy selector (`auto`, `llm_blueprint`, or `procedural`)
+- a visible creative/control mode selector; creative LLM blueprint generation is the product default
+- an advanced blueprint strategy selector (`auto`, `llm_blueprint`, or `procedural`)
+- optional controls for view and typed semantic template
 - a button to generate the result
 - inline loading/success/error feedback
 - an HTMX results panel that shows:
@@ -56,7 +60,11 @@ Example:
 curl -X POST http://127.0.0.1:8025/api/asset-spec \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down"
+    "prompt": "Quiero un guerrero pixel art lateral",
+    "view": "side-view",
+    "template_id": "warrior_side",
+    "generation_mode": "controlled",
+    "blueprint_strategy": "procedural"
   }'
 ```
 
@@ -66,18 +74,22 @@ Response includes:
 - `status`
 - `subject`
 - `asset_spec`
+- `decision_trace` with the requested view, resolved view source, and template provenance; the same safe trace is persisted in artifact metadata.
 
+View precedence is `template_id` > explicit `view` > deterministic default > interpretation. The deterministic `icon/front` default covers humanoid, prop, and unknown families. Supported templates are `warrior_front`, `warrior_side`, `wizard_front`, and `pig_side`. Templates constrain semantic intent (family, archetype, view, and pose) but never select geometry or force procedural generation. `generation_mode` independently expresses creative/controlled intent; `blueprint_strategy` chooses the requested backend in the integrated UI flow.
 ### `POST /api/blueprint`
 
 Builds and stores a validated blueprint from an existing sprite artifact.
 
 `strategy` accepts:
 
-- `auto` (default): procedural recipe for known subjects (`dragon`, `potion`, `sword`, `human`/`humanoid`/`person`/`chibi`), otherwise an LLM blueprint
+- `auto` (default): use the LLM creative path unless the persisted Asset Spec requests `controlled`; controlled mode requires a compatible visual grammar
 - `llm_blueprint`: always request a strict JSON blueprint from the configured LLM
-- `procedural`: always use the local procedural recipe, including its intentional generic fallback
+- `procedural`: require a compatible visual grammar and return a controlled error when unsupported
 
-LLM blueprints are parsed as `SpriteBlueprint`, validated for palette references, primitive count, primitive shape requirements, `0..63` canvas coordinates, and minimum raster quality before persistence. New blueprints can use the persisted automatic outline pass rather than duplicating outline primitives manually.
+`AssetSpecRequest.generation_mode` defaults to `exploratory`, making natural-language creation LLM-first. `controlled` keeps deterministic grammar generation available for reproducibility, compatible families, animation work, and batch variants. Explicit `llm_blueprint` or `procedural` always wins over the mode.
+
+LLM blueprints are parsed as `SpriteBlueprint`, validated for palette references, primitive count, primitive shape requirements, `0..63` canvas coordinates, semantic view intent, and minimum raster quality before persistence. A failed LLM candidate receives one repair attempt containing the canonical Asset Spec, bounded diagnostics, and the original candidate explicitly wrapped as untrusted data; the candidate is not persisted as a successful artifact. A second failure is stored as `blueprint_failed` without a successful blueprint/render. New blueprints can use the persisted automatic outline pass rather than duplicating outline primitives manually.
 
 Example:
 
@@ -190,6 +202,25 @@ Health:
 
 ```bash
 curl http://127.0.0.1:8025/health
+```
+
+## Server service
+
+The deployed service is `pixelforge.service`, enabled as a systemd user service and bound to `0.0.0.0:8020` for LAN access.
+
+```bash
+systemctl --user status pixelforge.service --no-pager -l
+curl http://127.0.0.1:8020/health
+```
+
+Its optional runtime environment file is `/home/erickesc/.config/pixelforge/env`; do not put production secrets in the repository `.env`.
+
+### `POST /v1/admin/service/restart`
+
+Schedules a restart of `pixelforge.service` one second after returning `202 Accepted`, so the caller receives a response before the server is restarted.
+
+```bash
+curl -X POST http://127.0.0.1:8020/v1/admin/service/restart
 ```
 
 Tests:

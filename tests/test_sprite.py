@@ -13,6 +13,13 @@ def test_asset_spec_request_uses_llm_by_default():
     assert AssetSpecRequest(prompt="heart").use_llm is True
 
 
+def test_asset_spec_request_uses_creative_generation_by_default():
+    request = AssetSpecRequest(prompt="draw a wizard")
+
+    assert request.generation_mode == "exploratory"
+    assert request.blueprint_strategy == "auto"
+
+
 def test_asset_spec_normalizes_numeric_shape_proportions_from_llm_json():
     spec = AssetSpec.model_validate(
         {
@@ -52,18 +59,21 @@ def test_blueprint_endpoint_uses_sprite_artifact_id_and_persists_blueprint():
     client = TestClient(app)
     artifact = client.post(
         "/api/asset-spec",
-        json={"prompt": "Quiero un dragón pequeño estilo pixel art, 64x64, para un RPG top-down", "use_llm": False},
+        json={"prompt": "Quiero un caballero estilo pixel art, 64x64, vista frontal", "use_llm": False},
     ).json()
 
-    response = client.post("/api/blueprint", json={"artifact_id": artifact["artifact_id"], "seed": 123})
+    response = client.post(
+        "/api/blueprint",
+        json={"artifact_id": artifact["artifact_id"], "strategy": "procedural", "seed": 123},
+    )
 
     assert response.status_code == 200
     body = response.json()
     assert body["artifact_id"] == artifact["artifact_id"]
     assert body["status"] == "blueprint_ready"
-    assert body["asset_spec"]["subject"] == "baby dragon"
-    assert body["blueprint"]["recipe"] == "baby_dragon"
-    assert body["blueprint"]["subject"] == "baby dragon"
+    assert body["asset_spec"]["subject"] == "human"
+    assert body["blueprint"]["recipe"] == "humanoid_front/warrior"
+    assert body["blueprint"]["subject"] == "human"
     assert len(body["blueprint"]["primitives"]) > 0
 
 
