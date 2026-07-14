@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from app.models.sprite_artifact import SpriteArtifact
 from app.schemas.sprite import AssetSpec, AssetSpecDecisionTrace, SpriteBlueprint
+from app.services.trace_context import get_trace_context, trace_details
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,14 @@ class SpriteArtifactStore:
             "sprite artifact created",
             extra={"artifact_id": artifact_id, "artifact_dir": str(artifact_dir), "subject": asset_spec.subject},
         )
+        self.append_trace_event(
+            artifact_id,
+            event_type="artifact.created",
+            stage="asset_spec",
+            outcome="completed",
+            status_after="asset_spec_ready",
+            details={"subject": asset_spec.subject},
+        )
         return SpriteArtifact(
             artifact_id=artifact_id,
             artifact_dir=artifact_dir,
@@ -184,10 +193,77 @@ class SpriteArtifactStore:
         )
         return self.load_artifact(artifact_id)
 
-    def mark_blueprint_failed(self, artifact_id: str, *, generation_error: dict[str, object]) -> SpriteArtifact:
+    def mark_blueprint_failed(
+        self,
+        artifact_id: str,
+        *,
+        generation_error: dict[str, object],
+        trace_event_details: dict[str, object] | None = None,
+    ) -> SpriteArtifact:
         """Persist bounded diagnostics without writing a rejected blueprint or render."""
         self._update_status(artifact_id, status="blueprint_failed", generation_error=generation_error)
+        self.append_trace_event(
+            artifact_id,
+            event_type="blueprint.generation.failed",
+            stage="blueprint",
+            outcome="failed",
+            status_after="blueprint_failed",
+            details=trace_details(issue_codes=generation_error.get("issue_codes"), **(trace_event_details or {})),
+        )
         return self.load_artifact(artifact_id)
+
+    def append_trace_event(
+        self,
+        artifact_id: str,
+        *,
+        event_type: str,
+        stage: str,
+        outcome: str,
+        status_before: str | None = None,
+        status_after: str | None = None,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        """Append a compact, safe domain event to an artifact-local timeline."""
+        artifact = self.load_artifact(artifact_id)
+        context = get_trace_context()
+        event: dict[str, object] = {
+            "event_schema_version": 1,
+            "occurred_at": _trace_iso_now(),
+            "artifact_id": artifact_id,
+            "event_type": event_type,
+            "stage": stage,
+            "outcome": outcome,
+            "details": details or {},
+        }
+        for key in ("request_id", "operation_id"):
+            if key in context:
+                event[key] = context[key]
+        if status_before is not None:
+            event["status_before"] = status_before
+        if status_after is not None:
+            event["status_after"] = status_after
+        trace_path = artifact.artifact_dir / "trace.jsonl"
+        with trace_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+        logger.info(
+            "sprite artifact trace event recorded",
+            extra={
+                "artifact_id": artifact_id,
+                "event_type": event_type,
+                "stage": stage,
+                "outcome": outcome,
+            },
+        )
+
+    def read_trace_events(self, artifact_id: str) -> list[dict[str, object]]:
+        artifact = self.load_artifact(artifact_id)
+        trace_path = artifact.artifact_dir / "trace.jsonl"
+        if not trace_path.exists():
+            return []
+        try:
+            return [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines() if line]
+        except json.JSONDecodeError as exc:
+            raise SpriteArtifactStoreError(f"Sprite artifact {artifact_id} contains an invalid trace") from exc
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -272,6 +348,10 @@ def _write_json(path: Path, data: dict) -> None:
 
 def _iso_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _trace_iso_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _new_id(prefix: str) -> str:

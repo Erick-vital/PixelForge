@@ -6,6 +6,8 @@ import os
 import sys
 from datetime import UTC, datetime
 
+from app.services.trace_context import get_trace_context
+
 _RESERVED_LOG_RECORD_FIELDS = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {
     "message",
     "asctime",
@@ -22,6 +24,7 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
+        payload.update(get_trace_context())
         for key, value in record.__dict__.items():
             if key in _RESERVED_LOG_RECORD_FIELDS or key.startswith("_"):
                 continue

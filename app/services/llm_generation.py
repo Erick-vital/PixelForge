@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -225,9 +226,18 @@ async def _post_anthropic_message(
 async def _post_json(
     *, endpoint: str, headers: dict[str, str], payload: dict[str, Any], timeout_seconds: int, provider: str, model: str
 ) -> httpx.Response:
+    started_at = time.perf_counter()
     logger.info(
         "llm provider request started",
-        extra={"provider": provider, "model": model, "endpoint": endpoint, "timeout_seconds": timeout_seconds},
+        extra={
+            "operation": "llm",
+            "stage": "provider_request",
+            "outcome": "started",
+            "provider": provider,
+            "model": model,
+            "endpoint": endpoint,
+            "timeout_seconds": timeout_seconds,
+        },
     )
     try:
         async with httpx.AsyncClient(timeout=timeout_seconds) as client:
@@ -235,7 +245,16 @@ async def _post_json(
             response.raise_for_status()
             logger.info(
                 "llm provider request completed",
-                extra={"provider": provider, "model": model, "endpoint": endpoint, "status_code": response.status_code},
+                extra={
+                    "operation": "llm",
+                    "stage": "provider_request",
+                    "outcome": "completed",
+                    "provider": provider,
+                    "model": model,
+                    "endpoint": endpoint,
+                    "status_code": response.status_code,
+                    "duration_ms": _elapsed_ms(started_at),
+                },
             )
             return response
     except httpx.HTTPStatusError as exc:
@@ -267,6 +286,10 @@ def _safe_response_text(response: httpx.Response | None, limit: int = 1000) -> s
     if response is None:
         return ""
     return (response.text or "")[:limit]
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return round((time.perf_counter() - started_at) * 1000)
 
 
 def _normalized_content(content: object) -> str:
