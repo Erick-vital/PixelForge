@@ -21,6 +21,7 @@ from app.schemas.sprite import (
     TechnicalConstraints,
 )
 from app.services.llm_generation import LlmGenerationService
+from app.sprite_engine.character.quadruped_spec import QuadrupedSpec
 from app.sprite_engine.character.spec import (
     AnatomySpec,
     CharacterSpec,
@@ -45,7 +46,8 @@ size: {width: 32|64|128, height: 32|64|128}
 palette: {main: string[], shadows: string[], accent: string[]}
 shape: {silhouette: string, proportions: object mapping labels to short string values; use strings such as \"1.0\" for numeric ratios}
 character: null for non-humanoids, otherwise {anatomy: {height: short|average|tall, build: slim|average|broad|heavy, head_size: small|average|large, leg_length: short|average|long}, pose: {stance: front_neutral, arm_pose: sides}, face: {style: simple}, hair: {style: none|short|short_messy, color: string|null}, clothing: {headwear: none|helmet|wizard_hat, upper: none|tunic|leather_apron|armor|robe, lower: none|work_pants|trousers|armored_legs|robe_lower, footwear: none|heavy_boots|boots}, equipment: {hand: none|blacksmith_hammer|hammer|sword|staff, off_hand: none|shield|book}, materials: {upper: cloth|leather|metal, equipment: wood|metal}, lighting: {direction: top_left|top_right}}
-Keep concrete character fields semantically consistent with subject and shape.silhouette. For example, a conventional wizard should use wizard_hat, robe/robe_lower, and staff unless the user explicitly asks to omit or replace them. Do not emit generic none/tunic/trousers values that contradict the requested archetype.
+quadruped: null for non-quadrupeds, otherwise {body_length: short|average|long, body_depth: slim|average|heavy, leg_length: short|average|long, head_shape: round|wedge, snout_length: short|average|long, ear_shape: floppy|triangular|upright, tail_shape: curly|straight|bushy, pose: side_neutral, direction: left|right}
+Keep concrete character fields semantically consistent with subject and shape.silhouette. For example, a conventional wizard should use wizard_hat, robe/robe_lower, and staff unless the user explicitly asks to omit or replace them. Do not emit generic none/tunic/trousers values that contradict the requested archetype. A wolf must emit its quadruped anatomy with long lean body, wedge head, long snout, upright ears, and bushy tail.
 technical_constraints: {transparent_background: true, pixel_art: true, readable_at_small_size: true}
 prompt_guidance: {target_prompt_tone: string, include_size: boolean, include_style: boolean, include_negative_prompt: boolean, normalize_subject_to_english: boolean}
 processing_profile: {resize_mode: nearest-neighbor, palette_max_colors: integer, center_sprite: boolean, transparent_background: boolean, export_format: png}
@@ -133,6 +135,7 @@ def _apply_request_intent(
     # Templates constrain semantic intent only. The caller independently chooses
     # whether that intent is designed by the LLM or compiled by a local grammar.
     resolved["generation_mode"] = request.generation_mode
+    _reconcile_archetype_semantics(resolved, prompt=request.prompt)
 
     if resolved.get("family") == "humanoid":
         character = resolved.get("character")
@@ -151,6 +154,55 @@ def _apply_request_intent(
         template_id=template.template_id if template is not None else None,
         requested_view=request.view,
     )
+
+
+def _reconcile_archetype_semantics(resolved: dict[str, Any], *, prompt: str) -> None:
+    """Repair generic defaults without overriding an explicit user exception."""
+    normalized_prompt = _normalize(prompt)
+    explicit_no_hat = any(
+        phrase in normalized_prompt for phrase in ("without a hat", "without hat", "no hat", "sin sombrero")
+    )
+    explicit_hand_replacement = any(
+        word in normalized_prompt
+        for word in ("hammer", "martillo", "sword", "espada", "book", "libro", "wand", "varita")
+    )
+    explicit_no_staff = any(
+        phrase in normalized_prompt
+        for phrase in ("without a staff", "without staff", "no staff", "sin baston", "sin bastón")
+    )
+    if resolved.get("family") == "humanoid" and resolved.get("archetype") == "wizard":
+        character = resolved.get("character")
+        character_data = dict(character) if isinstance(character, dict) else {}
+        clothing = dict(character_data.get("clothing") or {})
+        equipment = dict(character_data.get("equipment") or {})
+        if not explicit_no_hat and clothing.get("headwear") in {None, "none"}:
+            clothing["headwear"] = "wizard_hat"
+        if clothing.get("upper") in {None, "none", "tunic"}:
+            clothing["upper"] = "robe"
+        if clothing.get("lower") in {None, "none", "work_pants", "trousers"}:
+            clothing["lower"] = "robe_lower"
+        if not (explicit_hand_replacement or explicit_no_staff) and equipment.get("hand") in {None, "none"}:
+            equipment["hand"] = "staff"
+        character_data["clothing"] = clothing
+        character_data["equipment"] = equipment
+        resolved["character"] = character_data
+
+    if resolved.get("family") == "quadruped":
+        defaults = QuadrupedSpec().model_dump()
+        if resolved.get("archetype") == "wolf":
+            defaults.update(
+                body_length="long",
+                body_depth="slim",
+                leg_length="long",
+                head_shape="wedge",
+                snout_length="long",
+                ear_shape="upright",
+                tail_shape="bushy",
+            )
+        provided_quadruped = resolved.get("quadruped")
+        if isinstance(provided_quadruped, dict):
+            defaults.update(provided_quadruped)
+        resolved["quadruped"] = defaults
 
 
 def create_asset_spec_from_prompt(prompt: str) -> AssetSpec:

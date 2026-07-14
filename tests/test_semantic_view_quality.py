@@ -60,6 +60,20 @@ def _valid_side_profile_blueprint() -> SpriteBlueprint:
     )
 
 
+def test_sprite_primitive_preserves_semantic_part_and_group() -> None:
+    primitive = SpritePrimitive(
+        op="rectangle",
+        fill="cloth",
+        layer="torso",
+        bbox=(20, 20, 40, 46),
+        part="robe",
+        group_id="wizard-body",
+    )
+
+    assert primitive.part == "robe"
+    assert primitive.group_id == "wizard-body"
+
+
 def test_side_view_rejects_front_symmetric_humanoid_blueprint() -> None:
     result = evaluate_semantic_quality(_side_warrior_spec(), _front_symmetric_blueprint(), grammar_name=None)
 

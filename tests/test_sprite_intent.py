@@ -88,6 +88,93 @@ def test_template_constrains_semantics_without_forcing_procedural_generation() -
     assert trace.template_id == "wizard_front"
 
 
+def test_wizard_interpretation_reconciles_generic_fields_to_conventional_wizard() -> None:
+    llm = FakeLlm(
+        {
+            "subject": "wizard",
+            "shape": {"silhouette": "tall robed figure with pointed hat"},
+            "character": {
+                "clothing": {"headwear": "none", "upper": "tunic", "lower": "work_pants"},
+                "equipment": {"hand": "none"},
+            },
+        }
+    )
+
+    spec, _ = asyncio.run(create_asset_spec_from_request_with_trace(AssetSpecRequest(prompt="draw a wizard"), llm))
+
+    assert spec.character is not None
+    assert spec.character.clothing.headwear == "wizard_hat"
+    assert spec.character.clothing.upper == "robe"
+    assert spec.character.clothing.lower == "robe_lower"
+    assert spec.character.equipment.hand == "staff"
+
+
+def test_wizard_reconciliation_preserves_explicit_user_replacements() -> None:
+    llm = FakeLlm(
+        {
+            "subject": "wizard",
+            "character": {
+                "clothing": {"headwear": "none", "upper": "tunic", "lower": "trousers"},
+                "equipment": {"hand": "hammer"},
+            },
+        }
+    )
+
+    spec, _ = asyncio.run(
+        create_asset_spec_from_request_with_trace(
+            AssetSpecRequest(prompt="draw a wizard without a hat holding a hammer"), llm
+        )
+    )
+
+    assert spec.character is not None
+    assert spec.character.clothing.headwear == "none"
+    assert spec.character.equipment.hand == "hammer"
+
+
+def test_wizard_reconciliation_preserves_explicit_staff_exclusion_or_replacement() -> None:
+    llm = FakeLlm(
+        {
+            "subject": "wizard",
+            "character": {
+                "clothing": {"headwear": "none", "upper": "tunic", "lower": "trousers"},
+                "equipment": {"hand": "none"},
+            },
+        }
+    )
+
+    spec, _ = asyncio.run(
+        create_asset_spec_from_request_with_trace(AssetSpecRequest(prompt="mago sin bastón con una varita"), llm)
+    )
+
+    assert spec.character is not None
+    assert spec.character.equipment.hand == "none"
+
+
+def test_wolf_interpretation_populates_typed_quadruped_spec() -> None:
+    llm = FakeLlm({"subject": "wolf", "game_view": "side-view", "quadruped": None})
+
+    spec, _ = asyncio.run(create_asset_spec_from_request_with_trace(AssetSpecRequest(prompt="draw a wolf"), llm))
+
+    assert spec.family == "quadruped"
+    assert spec.quadruped is not None
+    assert spec.quadruped.body_length == "long"
+    assert spec.quadruped.head_shape == "wedge"
+    assert spec.quadruped.snout_length == "long"
+    assert spec.quadruped.ear_shape == "upright"
+    assert spec.quadruped.tail_shape == "bushy"
+
+
+def test_wolf_interpretation_merges_partial_anatomy_with_wolf_defaults() -> None:
+    llm = FakeLlm({"subject": "wolf", "quadruped": {"tail_shape": "straight"}})
+
+    spec, _ = asyncio.run(create_asset_spec_from_request_with_trace(AssetSpecRequest(prompt="create a wolf"), llm))
+
+    assert spec.quadruped is not None
+    assert spec.quadruped.head_shape == "wedge"
+    assert spec.quadruped.snout_length == "long"
+    assert spec.quadruped.tail_shape == "straight"
+
+
 def test_asset_spec_prompt_requires_semantic_character_consistency() -> None:
     llm = FakeLlm({"subject": "wizard", "character": {}})
 

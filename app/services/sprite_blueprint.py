@@ -30,7 +30,7 @@ recipe: short string
 subject: concise English subject
 palette: object mapping palette keys to #RRGGBB colors
 primitives: array of primitive objects
-layer_order: ordered array using only back_equipment, pants, boots, torso, arms, head, hair, front_equipment, shadows, highlights, base
+layer_order: ordered array using only base, back_equipment, pants, boots, torso, arms, head, hair, front_equipment, shadows, highlights
 material_roles: object mapping emitted palette fill keys to cloth, leather, metal, wood, skin, or hair
 lighting_direction: top_left or top_right
 outline: object with enabled, color_key, and width
@@ -44,6 +44,8 @@ bbox: [x0, y0, x1, y1] required only for ellipse and rectangle
 points: [[x, y], ...] required for polygon, line, and point
 width: positive integer optional for line
 size: positive integer optional for point
+part: required semantic identity: body, head, hat, robe, belt, buckle, hand, staff, book, held_item, front_leg, rear_leg, snout, ear, tail, or ground
+group_id: optional short identifier grouping multiple primitives of the same physical part
 
 Rules:
 - Author for a fixed 64x64 coordinate canvas; every coordinate must be an integer from 0 through 63.
@@ -114,7 +116,7 @@ async def generate_sprite_blueprint(
             model=model,
             base_url=base_url,
             temperature=0.0,
-            max_tokens=10_000,
+            max_tokens=20_000,
         )
     except (LlmGenerationProviderError, MissingLlmApiKeyError) as exc:
         logger.warning("llm sprite blueprint generation failed", extra={"error": str(exc)})
@@ -133,7 +135,7 @@ async def generate_sprite_blueprint(
                 model=model,
                 base_url=base_url,
                 temperature=0.0,
-                max_tokens=10_000,
+                max_tokens=20_000,
             )
             blueprint, semantic_quality = _parse_and_validate_sprite_blueprint(repair_result.text, asset_spec)
             result = repair_result
@@ -226,7 +228,25 @@ def _resolve_strategy(asset_spec: AssetSpec, strategy: BlueprintStrategy) -> Lit
 
 def _blueprint_prompt(asset_spec: AssetSpec, *, seed: int) -> str:
     spec_json = json.dumps(asset_spec.model_dump(mode="json"), ensure_ascii=False, indent=2)
-    return f"Create one blueprint for this Asset Spec. Use seed {seed} only as a variation hint.\n\n{spec_json}"
+    family_contract = _family_blueprint_contract(asset_spec)
+    return (
+        f"Create one blueprint for this Asset Spec. Use seed {seed} only as a variation hint.\n\n"
+        f"{family_contract}\n\n{spec_json}"
+    )
+
+
+def _family_blueprint_contract(asset_spec: AssetSpec) -> str:
+    if asset_spec.family == "quadruped" and asset_spec.archetype == "wolf":
+        direction = asset_spec.quadruped.direction if asset_spec.quadruped else "right"
+        front_side = "right of the rear legs" if direction == "right" else "left of the rear legs"
+        return f"""Wolf side-view contract (direction: {direction}):
+- Emit exactly two front_leg primitives and two rear_leg primitives; give each a distinct group_id.
+- Each leg must overlap the body vertically and terminate on one common horizontal ground line tagged ground. During repair, use diagnostics.wolf_ground_y: every leg bbox bottom or final line/polygon foot y must equal that value.
+- Place the front legs {front_side}; the snout must extend toward {direction} from the head.
+- Keep body, head, snout, ears, tail, and every leg visibly connected to the correct anatomical parent.
+- The body must be wider than tall.
+- If outline is enabled, its outline color_key must exist in palette."""
+    return "If outline is enabled, its outline color_key must exist in palette."
 
 
 def _blueprint_repair_prompt(asset_spec: AssetSpec, *, error: Exception, candidate: str) -> str:
@@ -235,7 +255,14 @@ def _blueprint_repair_prompt(asset_spec: AssetSpec, *, error: Exception, candida
         "semantic_issue_codes": ["blueprint_validation_failed"],
         "metrics": {},
         "required_view": asset_spec.game_view,
-        "direction": asset_spec.character.pose.direction if asset_spec.character else "right",
+        "direction": (
+            asset_spec.character.pose.direction
+            if asset_spec.character
+            else asset_spec.quadruped.direction
+            if asset_spec.quadruped
+            else "right"
+        ),
+        "family_contract": _family_blueprint_contract(asset_spec),
     }
     if isinstance(error, SemanticQualityError):
         diagnostic["semantic_issue_codes"] = list(error.report.issue_codes)

@@ -33,7 +33,7 @@ class LlmGenerationResult:
 
 @dataclass(frozen=True)
 class LlmGenerationService:
-    timeout_seconds: int = 90
+    timeout_seconds: int = 180
 
     async def generate_text(
         self,
@@ -255,11 +255,12 @@ async def _post_json(
             f"LLM provider request failed: {exc}. Response body: {response_text}", status_code=status_code
         ) from exc
     except (httpx.HTTPError, RuntimeError) as exc:
+        error_detail = str(exc) or type(exc).__name__
         logger.warning(
             "llm provider request failed",
-            extra={"provider": provider, "model": model, "endpoint": endpoint, "error": str(exc)},
+            extra={"provider": provider, "model": model, "endpoint": endpoint, "error": error_detail},
         )
-        raise LlmGenerationProviderError(f"LLM provider request failed: {exc}") from exc
+        raise LlmGenerationProviderError(f"LLM provider request failed: {error_detail}") from exc
 
 
 def _safe_response_text(response: httpx.Response | None, limit: int = 1000) -> str:

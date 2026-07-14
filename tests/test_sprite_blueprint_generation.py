@@ -10,7 +10,7 @@ from app.schemas.sprite import AssetSpec, SpriteBlueprint, SpritePrimitive
 from app.services.llm_generation import LlmGenerationProviderError, LlmGenerationResult
 from app.services.sprite import SpriteService
 from app.services.sprite_artifact_store import SpriteArtifactStore
-from app.services.sprite_blueprint import BlueprintGenerationError, generate_sprite_blueprint
+from app.services.sprite_blueprint import BlueprintGenerationError, _blueprint_prompt, generate_sprite_blueprint
 
 
 def test_blueprint_without_outline_uses_legacy_disabled_default():
@@ -90,6 +90,26 @@ def _heart_spec() -> AssetSpec:
     )
 
 
+def test_wolf_blueprint_prompt_includes_grounding_and_leg_order_contract() -> None:
+    wolf = AssetSpec.model_validate(
+        {
+            "family": "quadruped",
+            "archetype": "wolf",
+            "subject": "wolf",
+            "game_view": "side-view",
+            "quadruped": {"direction": "right"},
+        }
+    )
+
+    prompt = _blueprint_prompt(wolf, seed=0)
+
+    assert "front_leg" in prompt
+    assert "rear_leg" in prompt
+    assert "common horizontal ground line" in prompt
+    assert "right of the rear legs" in prompt
+    assert "outline color_key must exist in palette" in prompt
+
+
 def test_llm_blueprint_generation_validates_and_normalizes_a_heart_blueprint():
     llm = FakeBlueprintLlm(
         """
@@ -120,7 +140,7 @@ def test_llm_blueprint_generation_validates_and_normalizes_a_heart_blueprint():
     assert generated.provider == "fake"
     assert generated.model == "fake-blueprint-model"
     assert llm.calls[0]["temperature"] == 0.0
-    assert llm.calls[0]["max_tokens"] == 10_000
+    assert llm.calls[0]["max_tokens"] == 20_000
 
 
 def test_llm_blueprint_generation_repairs_one_malformed_json_response():
@@ -193,15 +213,15 @@ def test_exploratory_auto_preserves_missing_grammar_reason():
 
 def test_creative_auto_uses_llm_even_when_a_procedural_grammar_exists():
     llm = FakeBlueprintLlm(
-        '{"recipe":"wizard","subject":"wizard","palette":{"base":"#5e3fc2"},'
+        '{"recipe":"warrior","subject":"warrior","palette":{"base":"#5e3fc2"},'
         '"primitives":[{"op":"ellipse","fill":"base","bbox":[12,8,52,56]}]}'
     )
     wizard = AssetSpec.model_validate(
         {
             "generation_mode": "auto",
             "family": "humanoid",
-            "archetype": "wizard",
-            "subject": "wizard",
+            "archetype": "warrior",
+            "subject": "warrior",
             "character": {},
         }
     )
@@ -262,6 +282,25 @@ def test_service_persists_llm_blueprint_generation_lineage(tmp_path):
     assert generation["skeleton"] is None
     assert generation["fallback_reason"]
     assert generation["seed"] == 11
+
+
+def test_successful_blueprint_save_clears_prior_generation_error(tmp_path):
+    store = SpriteArtifactStore(data_dir=tmp_path / "data", items_dir=tmp_path / "items")
+    artifact = store.create_asset_spec_artifact(prompt="heart", asset_spec=_heart_spec())
+    store.mark_blueprint_failed(artifact.artifact_id, generation_error={"issue_codes": ["provider_failed"]})
+
+    store.save_blueprint(
+        artifact.artifact_id,
+        SpriteBlueprint(
+            recipe="llm_blueprint",
+            subject="heart",
+            palette={"base": "#d62839"},
+            primitives=[SpritePrimitive(op="ellipse", fill="base", bbox=(16, 16, 48, 48))],
+        ),
+        generation={"strategy": "llm_blueprint", "seed": 0},
+    )
+
+    assert "generation_error" not in store.read_metadata(artifact.artifact_id)
 
 
 def test_render_sprite_prefers_a_persisted_blueprint_over_the_generic_recipe(tmp_path):

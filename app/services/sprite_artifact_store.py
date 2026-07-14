@@ -161,7 +161,12 @@ class SpriteArtifactStore:
         if not artifact.blueprint_json_path:
             raise SpriteArtifactStoreError(f"Sprite artifact {artifact_id} is missing blueprint path")
         _write_json(artifact.blueprint_json_path, blueprint.model_dump(mode="json"))
-        self._update_status(artifact_id, status="blueprint_ready", blueprint_generation=generation)
+        self._update_status(
+            artifact_id,
+            status="blueprint_ready",
+            blueprint_generation=generation,
+            clear_generation_error=True,
+        )
         logger.info(
             "sprite blueprint saved",
             extra={"artifact_id": artifact_id, "blueprint_path": str(artifact.blueprint_json_path)},
@@ -200,6 +205,7 @@ class SpriteArtifactStore:
         status: str,
         blueprint_generation: dict[str, object] | None = None,
         generation_error: dict[str, object] | None = None,
+        clear_generation_error: bool = False,
     ) -> None:
         with self._connect() as conn:
             conn.execute("UPDATE sprite_artifacts SET status = ? WHERE id = ?", (status, artifact_id))
@@ -209,6 +215,7 @@ class SpriteArtifactStore:
             status=status,
             blueprint_generation=blueprint_generation,
             generation_error=generation_error,
+            clear_generation_error=clear_generation_error,
         )
 
     def _update_render_path(self, artifact_id: str, render_png_path: Path) -> None:
@@ -228,6 +235,7 @@ class SpriteArtifactStore:
         render_png_path: Path | None = None,
         blueprint_generation: dict[str, object] | None = None,
         generation_error: dict[str, object] | None = None,
+        clear_generation_error: bool = False,
     ) -> None:
         artifact = self.load_artifact(artifact_id)
         metadata_path = artifact.artifact_dir / "metadata.json"
@@ -249,7 +257,7 @@ class SpriteArtifactStore:
         saved_generation = blueprint_generation or existing.get("blueprint_generation")
         if saved_generation is not None:
             metadata["blueprint_generation"] = saved_generation
-        saved_error = generation_error or existing.get("generation_error")
+        saved_error = None if clear_generation_error else generation_error or existing.get("generation_error")
         if saved_error is not None:
             metadata["generation_error"] = saved_error
         decision_trace = existing.get("decision_trace")

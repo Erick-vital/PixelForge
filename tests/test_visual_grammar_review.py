@@ -76,6 +76,12 @@ def test_front_slots_have_typed_geometry_and_preserve_explicit_choices():
     assert warrior.layer_order.index("back_equipment") < warrior.layer_order.index("front_equipment")
 
 
+def test_quadruped_asset_specs_materialize_a_typed_quadruped_spec() -> None:
+    spec = AssetSpec(family="quadruped", archetype="wolf", subject="wolf", game_view="side-view")
+
+    assert isinstance(spec.quadruped, QuadrupedSpec)
+
+
 def test_quadruped_all_typed_fields_change_geometry_and_mirror():
     baseline = build_quadruped_skeleton(QuadrupedSpec())
     variants = [

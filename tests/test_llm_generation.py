@@ -46,9 +46,35 @@ def test_llm_service_uses_openai_compatible_provider_without_leaking_secret(monk
     assert result.text == "generated text"
     assert result.provider == "openai_compatible"
     assert result.model == "gpt-test"
+    assert LlmGenerationService().timeout_seconds == 180
     assert FakeAsyncClient.calls[0]["url"] == "https://api.openai.com/v1/chat/completions"
     assert FakeAsyncClient.calls[0]["headers"]["Authorization"] == "Bearer sk-test-secret"
     assert "sk-test-secret" not in FakeAsyncClient.calls[0]["json"]["messages"][1]["content"]
+
+
+def test_llm_timeout_error_includes_exception_type(monkeypatch):
+    class TimingOutAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        async def post(self, url, headers, json):
+            raise httpx.ReadTimeout("")
+
+    monkeypatch.setattr(llm_generation.httpx, "AsyncClient", TimingOutAsyncClient)
+    monkeypatch.setenv("APP_LLM_API_KEY", "sk-test-secret")
+
+    with pytest.raises(llm_generation.LlmGenerationProviderError, match="ReadTimeout"):
+        asyncio.run(
+            LlmGenerationService().generate_text(
+                system_prompt="s", prompt="p", provider="openai_compatible", model="gpt-test"
+            )
+        )
 
 
 def test_missing_llm_api_key_raises_clear_error(monkeypatch):

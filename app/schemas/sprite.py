@@ -102,6 +102,8 @@ class AssetSpec(BaseModel):
 
     @model_validator(mode="after")
     def reconcile_view_and_pose(self) -> AssetSpec:
+        if self.family == "quadruped" and self.quadruped is None:
+            self.quadruped = QuadrupedSpec()
         if self.character is None or self.game_view not in {"side-view", "icon/front"}:
             return self
 
@@ -199,6 +201,26 @@ DEFAULT_LAYER_ORDER: tuple[SpriteLayer, ...] = (
 )
 
 
+SpritePart = Literal[
+    "body",
+    "head",
+    "hat",
+    "robe",
+    "belt",
+    "buckle",
+    "hand",
+    "staff",
+    "book",
+    "held_item",
+    "front_leg",
+    "rear_leg",
+    "snout",
+    "ear",
+    "tail",
+    "ground",
+]
+
+
 class SpritePrimitive(BaseModel):
     model_config = ConfigDict(extra="forbid")
     op: Literal["ellipse", "rectangle", "polygon", "line", "point"]
@@ -208,6 +230,8 @@ class SpritePrimitive(BaseModel):
     points: list[tuple[int, int]] = Field(default_factory=list)
     width: int | None = None
     size: int | None = None
+    part: SpritePart | None = None
+    group_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=48)] | None = None
 
 
 class SpriteOutlineSpec(BaseModel):

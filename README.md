@@ -15,7 +15,7 @@ The product focus is:
 ## What the repo does now
 
 - FastAPI JSON API
-- Canonical Sprite Asset Spec with structured `CharacterSpec` for humanoid anatomy, pose, face, hair, clothing, equipment, materials, and lighting
+- Canonical Sprite Asset Spec with structured `CharacterSpec` for humanoid anatomy, pose, face, hair, clothing, equipment, materials, and lighting; typed `QuadrupedSpec` for animal anatomy
 - Typed visual grammars selected by persisted `family`, `archetype`, view, pose, and capabilities
 - Front humanoid grammars (generic, blacksmith, warrior, wizard), side humanoids (generic, warrior), and side pig quadrupeds
 - Procedural composition with semantic RGBA layers, inspectable alpha masks, and deterministic material-local shading
@@ -89,7 +89,7 @@ Builds and stores a validated blueprint from an existing sprite artifact.
 
 `AssetSpecRequest.generation_mode` defaults to `exploratory`, making natural-language creation LLM-first. `controlled` keeps deterministic grammar generation available for reproducibility, compatible families, animation work, and batch variants. Explicit `llm_blueprint` or `procedural` always wins over the mode.
 
-LLM blueprints are parsed as `SpriteBlueprint`, validated for palette references, primitive count, primitive shape requirements, `0..63` canvas coordinates, semantic view intent, and minimum raster quality before persistence. A failed LLM candidate receives one repair attempt containing the canonical Asset Spec, bounded diagnostics, and the original candidate explicitly wrapped as untrusted data; the candidate is not persisted as a successful artifact. A second failure is stored as `blueprint_failed` without a successful blueprint/render. New blueprints can use the persisted automatic outline pass rather than duplicating outline primitives manually.
+LLM blueprints are parsed as `SpriteBlueprint`, validated for palette references, primitive count, primitive shape requirements, `0..63` canvas coordinates, semantic view intent, and minimum raster quality before persistence. Semantic `part` tags remain optional in the schema for historical compatibility, but are required for new LLM contracts that need them: wizard checks require a head, hat, robe, and—when the canonical Asset Spec requests held equipment—a hand plus its staff/item; wolf checks require tagged head/body/snout/ears/tail/front and rear legs/ground with attachment checks. A failed LLM candidate receives one repair attempt containing the canonical Asset Spec, bounded diagnostics, and the original candidate explicitly wrapped as untrusted data; the candidate is not persisted as a successful artifact. A second failure is stored as `blueprint_failed`.
 
 Example:
 

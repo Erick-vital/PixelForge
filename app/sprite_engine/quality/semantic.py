@@ -53,6 +53,8 @@ def evaluate_semantic_quality(
     metrics: dict[str, SemanticMetric] = {"required_view": spec.game_view}
 
     _append_grammar_contract_issues(spec, blueprint, grammar_name, issue_codes)
+    if grammar_name is None:
+        _append_llm_family_contract_issues(spec, blueprint, issue_codes, metrics)
 
     if spec.family == "humanoid" and spec.game_view in {"side-view", "icon/front"}:
         mirror_overlap = _mirror_overlap(spec, blueprint)
@@ -80,6 +82,138 @@ def require_semantic_quality(
     if not report.passed:
         raise SemanticQualityError(report)
     return report
+
+
+def _append_llm_family_contract_issues(
+    spec: AssetSpec,
+    blueprint: SpriteBlueprint,
+    issue_codes: list[str],
+    metrics: dict[str, SemanticMetric],
+) -> None:
+    parts = {primitive.part for primitive in blueprint.primitives if primitive.part is not None}
+    if spec.family == "humanoid" and spec.archetype == "wizard":
+        required_parts = ["head", "hat", "robe"]
+        held_part = None
+        if spec.character and spec.character.equipment.hand != "none":
+            held_part = "staff" if spec.character.equipment.hand == "staff" else "held_item"
+            required_parts.extend(["hand", held_part])
+        for part in required_parts:
+            if part not in parts:
+                issue_codes.append(f"wizard_missing_{part}")
+        head = _part_bounds(blueprint, "head")
+        hat = _part_bounds(blueprint, "hat")
+        if head and hat and hat[3] > head[1] + 4:
+            issue_codes.append("wizard_hat_not_above_head")
+        held_item = _part_bounds(blueprint, held_part) if held_part else None
+        hands = [_primitive_bounds(primitive) for primitive in blueprint.primitives if primitive.part == "hand"]
+        if held_item and hands and not any(_bounds_touch(held_item, hand) for hand in hands):
+            issue_codes.append("wizard_staff_not_held" if held_part == "staff" else "wizard_held_item_not_held")
+        robe = _part_bounds(blueprint, "robe")
+        belt = _part_bounds(blueprint, "belt")
+        buckle = _part_bounds(blueprint, "buckle")
+        if robe and belt and not _bounds_touch(robe, belt):
+            issue_codes.append("wizard_belt_not_on_robe")
+        if belt and buckle and _bounds_area(buckle) >= _bounds_area(belt):
+            issue_codes.append("wizard_buckle_not_smaller_than_belt")
+
+    if spec.family == "quadruped" and spec.archetype == "wolf":
+        required = {"body", "head", "snout", "tail", "ground"}
+        for part in required - parts:
+            issue_codes.append(f"wolf_missing_{part}")
+        if sum(primitive.part == "ear" for primitive in blueprint.primitives) < 2:
+            issue_codes.append("wolf_missing_ears")
+        if sum(primitive.part == "front_leg" for primitive in blueprint.primitives) < 2:
+            issue_codes.append("wolf_missing_front_legs")
+        if sum(primitive.part == "rear_leg" for primitive in blueprint.primitives) < 2:
+            issue_codes.append("wolf_missing_rear_legs")
+        body = _part_bounds(blueprint, "body")
+        head = _part_bounds(blueprint, "head")
+        snout = _part_bounds(blueprint, "snout")
+        tail = _part_bounds(blueprint, "tail")
+        ground = _part_bounds(blueprint, "ground")
+        direction = spec.quadruped.direction if spec.quadruped else "right"
+        if body and body[2] - body[0] <= body[3] - body[1]:
+            issue_codes.append("wolf_body_not_longer_than_tall")
+        if (
+            head
+            and snout
+            and ((direction == "right" and snout[2] <= head[2]) or (direction == "left" and snout[0] >= head[0]))
+        ):
+            issue_codes.append("wolf_snout_not_directional")
+        if body and head and not _bounds_touch(body, head):
+            issue_codes.append("wolf_head_not_attached")
+        if body and tail and not _bounds_touch(body, tail):
+            issue_codes.append("wolf_tail_not_attached")
+        leg_bounds = [
+            _primitive_bounds(primitive)
+            for primitive in blueprint.primitives
+            if primitive.part in {"front_leg", "rear_leg"}
+        ]
+        if ground:
+            metrics["wolf_ground_y"] = ground[3]
+        if leg_bounds:
+            metrics["wolf_leg_bottoms"] = ",".join(str(leg[3]) for leg in leg_bounds)
+        front_centers = [
+            _primitive_center_x(primitive) for primitive in blueprint.primitives if primitive.part == "front_leg"
+        ]
+        rear_centers = [
+            _primitive_center_x(primitive) for primitive in blueprint.primitives if primitive.part == "rear_leg"
+        ]
+        if (
+            front_centers
+            and rear_centers
+            and (
+                (
+                    direction == "right"
+                    and sum(front_centers) / len(front_centers) <= sum(rear_centers) / len(rear_centers)
+                )
+                or (
+                    direction == "left"
+                    and sum(front_centers) / len(front_centers) >= sum(rear_centers) / len(rear_centers)
+                )
+            )
+        ):
+            issue_codes.append("wolf_leg_order_invalid")
+        if (
+            body
+            and ground
+            and any(not _bounds_touch(leg, body) or not _bounds_touch(leg, ground) for leg in leg_bounds)
+        ):
+            issue_codes.append("wolf_legs_not_grounded")
+
+
+def _part_bounds(blueprint: SpriteBlueprint, part: str) -> tuple[int, int, int, int] | None:
+    bounds = [_primitive_bounds(primitive) for primitive in blueprint.primitives if primitive.part == part]
+    if not bounds:
+        return None
+    return (
+        min(bound[0] for bound in bounds),
+        min(bound[1] for bound in bounds),
+        max(bound[2] for bound in bounds),
+        max(bound[3] for bound in bounds),
+    )
+
+
+def _primitive_bounds(primitive: SpritePrimitive) -> tuple[int, int, int, int]:
+    if primitive.bbox is not None:
+        return primitive.bbox
+    xs = _primitive_xs(primitive)
+    ys = [point[1] for point in primitive.points]
+    pad = (primitive.width or primitive.size or 1) // 2
+    return min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad
+
+
+def _bounds_area(bounds: tuple[int, int, int, int]) -> int:
+    return max(0, bounds[2] - bounds[0]) * max(0, bounds[3] - bounds[1])
+
+
+def _bounds_touch(left: tuple[int, int, int, int], right: tuple[int, int, int, int], *, tolerance: int = 1) -> bool:
+    return not (
+        left[2] < right[0] - tolerance
+        or right[2] < left[0] - tolerance
+        or left[3] < right[1] - tolerance
+        or right[3] < left[1] - tolerance
+    )
 
 
 def _append_grammar_contract_issues(
